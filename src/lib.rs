@@ -1,7 +1,6 @@
+#![no_std]
 pub mod errors {
-    pub use safa_utils::errors::ErrorStatus;
+    pub use safa_utils::errors::{ErrorStatus, SysResult};
 }
 
-pub mod syscalls {
-    pub use safa_utils::syscalls::SyscallTable;
-}
+pub mod syscalls;

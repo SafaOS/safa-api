@@ -1,5 +1,6 @@
 use super::errors::ErrorStatus;
 extern crate alloc;
+use super::raw::{RawSlice, RawSliceMut};
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::{ops, ptr};
@@ -17,59 +18,6 @@ macro_rules! err_from_u16 {
     ($result:expr, $ok:expr) => {
         err_from_u16!($result).map(|()| $ok)
     };
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct RawSlice<T> {
-    ptr: *const T,
-    len: usize,
-}
-
-impl<T> RawSlice<T> {
-    #[inline(always)]
-    pub unsafe fn from_raw_parts(ptr: *const T, len: usize) -> Self {
-        Self { ptr, len }
-    }
-    #[inline(always)]
-    pub unsafe fn from_slice(slice: &[T]) -> Self {
-        Self {
-            ptr: slice.as_ptr(),
-            len: slice.len(),
-        }
-    }
-}
-
-impl<T> RawSliceMut<T> {
-    #[inline(always)]
-    pub unsafe fn from_raw_parts(ptr: *mut T, len: usize) -> Self {
-        Self { ptr, len }
-    }
-}
-
-impl<T> RawSliceMut<RawSlice<T>> {
-    /// Converts a slice of slices of [`T`] into [`RawSliceMut<RawSlice<T>>`]
-    /// # Safety
-    /// `slices` becomes invaild after use
-    /// as it is going to be reused as a memory location for creating `Self`
-    /// making this unexpensive but dangerous
-    #[inline(always)]
-    pub unsafe fn from_slices(slices: *mut [&[T]]) -> Self {
-        let old_slices = unsafe { &mut *slices };
-        let raw_slices = unsafe { &mut *(slices as *mut [RawSlice<T>]) };
-
-        for (i, slice) in old_slices.iter().enumerate() {
-            raw_slices[i] = unsafe { RawSlice::from_slice(slice) };
-        }
-        unsafe { RawSliceMut::from_raw_parts(raw_slices.as_mut_ptr(), raw_slices.len()) }
-    }
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct RawSliceMut<T> {
-    ptr: *mut T,
-    len: usize,
 }
 
 #[inline(always)]
@@ -390,8 +338,8 @@ pub unsafe fn unsafe_pspawn(
             name_len,
             path.as_ptr(),
             path.len(),
-            argv.ptr,
-            argv.len,
+            argv.as_ptr(),
+            argv.len(),
             flags,
             &mut pid,
         ),

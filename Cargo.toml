@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 safa-utils = { git = "https://github.com/SafaOS/SafaOS", branch = "rust" }
+spin = "0.9.8"

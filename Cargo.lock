@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "autocfg"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -40,9 +46,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lock_api"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07af8b9cdd281b7915f413fa73f29ebd5d55d0d3f0155584dade1ff18cea1b17"
+dependencies = [
+ "autocfg",
+ "scopeguard",
+]
+
+[[package]]
 name = "macros"
 version = "0.1.0"
-source = "git+https://github.com/SafaOS/SafaOS?branch=rust#3f4bbc9db09912e9d03caa2d8ebe0e7ec39c3ac0"
+source = "git+https://github.com/SafaOS/SafaOS?branch=rust#3c17dd29ae9f13bb808deb701b1b0eaedafb58b6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -72,9 +88,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.39"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1f1914ce909e1658d9907913b4b91947430c7d9be598b15a1912935b8c04801"
+checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
 ]
@@ -84,18 +100,25 @@ name = "safa-abi"
 version = "0.1.0"
 dependencies = [
  "safa-utils",
+ "spin",
 ]
 
 [[package]]
 name = "safa-utils"
 version = "0.1.0"
-source = "git+https://github.com/SafaOS/SafaOS?branch=rust#3f4bbc9db09912e9d03caa2d8ebe0e7ec39c3ac0"
+source = "git+https://github.com/SafaOS/SafaOS?branch=rust#3c17dd29ae9f13bb808deb701b1b0eaedafb58b6"
 dependencies = [
  "heapless",
  "int-enum",
  "macros",
  "serde",
 ]
+
+[[package]]
+name = "scopeguard"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "serde"
@@ -115,6 +138,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.100",
+]
+
+[[package]]
+name = "spin"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
 ]
 
 [[package]]

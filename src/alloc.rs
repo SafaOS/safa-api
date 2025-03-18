@@ -169,7 +169,9 @@ extern "C" fn syscreate(object_size: usize) -> Optional<NonNullSlice<u8>> {
 #[unsafe(no_mangle)]
 unsafe extern "C" fn sysdestroy(object_ptr: *mut u8) {
     unsafe {
-        let ptr = NonNull::new_unchecked(object_ptr);
-        GLOBAL_SYSTEM_ALLOCATOR.deallocate(ptr)
+        match NonNull::new(object_ptr) {
+            Some(ptr) => GLOBAL_SYSTEM_ALLOCATOR.deallocate(ptr),
+            None => (),
+        }
     }
 }

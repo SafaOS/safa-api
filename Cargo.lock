@@ -58,7 +58,7 @@ dependencies = [
 [[package]]
 name = "macros"
 version = "0.1.0"
-source = "git+https://github.com/SafaOS/SafaOS?branch=rust#3c17dd29ae9f13bb808deb701b1b0eaedafb58b6"
+source = "git+https://github.com/SafaOS/SafaOS?branch=rust#01637adbd07ed8a70ba2f9ead04b0990397931a9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -106,7 +106,7 @@ dependencies = [
 [[package]]
 name = "safa-utils"
 version = "0.1.0"
-source = "git+https://github.com/SafaOS/SafaOS?branch=rust#3c17dd29ae9f13bb808deb701b1b0eaedafb58b6"
+source = "git+https://github.com/SafaOS/SafaOS?branch=rust#01637adbd07ed8a70ba2f9ead04b0990397931a9"
 dependencies = [
  "heapless",
  "int-enum",

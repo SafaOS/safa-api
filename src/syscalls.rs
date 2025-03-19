@@ -1,4 +1,6 @@
 use super::errors::ErrorStatus;
+
+#[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
 use super::raw::{RawSlice, RawSliceMut};
 use alloc::vec::Vec;

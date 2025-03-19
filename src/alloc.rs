@@ -1,10 +1,7 @@
-use crate::{
-    Locked,
-    raw::{NonNullSlice, Optional},
-};
+use crate::raw::{NonNullSlice, Optional};
 
 use super::syscalls;
-use core::ptr::NonNull;
+use core::{cell::UnsafeCell, ptr::NonNull};
 
 #[derive(Debug, Default)]
 struct Block {
@@ -138,19 +135,33 @@ impl SystemAllocator {
 unsafe impl Send for SystemAllocator {}
 unsafe impl Sync for SystemAllocator {}
 
-impl Locked<SystemAllocator> {
+// FIXME: implement locks before multithreading
+pub struct GlobalSystemAllocator {
+    inner: UnsafeCell<SystemAllocator>,
+}
+
+impl GlobalSystemAllocator {
+    const fn new() -> Self {
+        Self {
+            inner: UnsafeCell::new(SystemAllocator::new()),
+        }
+    }
     #[inline]
     pub fn allocate(&self, size: usize) -> Option<NonNull<[u8]>> {
-        self.lock().allocate(size)
+        unsafe { (*self.inner.get()).allocate(size) }
     }
     #[inline]
     pub unsafe fn deallocate(&self, ptr: NonNull<u8>) {
-        unsafe { self.lock().deallocate(ptr) }
+        unsafe { (*self.inner.get()).deallocate(ptr) }
     }
-    // TODO: implement grow and etc
+
+    // TODO: implement grow and shrink
 }
 
-pub static GLOBAL_SYSTEM_ALLOCATOR: Locked<SystemAllocator> = Locked::new(SystemAllocator::new());
+unsafe impl Sync for GlobalSystemAllocator {}
+unsafe impl Send for GlobalSystemAllocator {}
+
+pub static GLOBAL_SYSTEM_ALLOCATOR: GlobalSystemAllocator = GlobalSystemAllocator::new();
 
 /// Allocates an object sized `object_size` using [`GLOBAL_SYSTEM_ALLOCATOR`]
 #[unsafe(no_mangle)]

@@ -6,8 +6,8 @@ use super::raw::{RawSlice, RawSliceMut};
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::{ops, ptr};
-use safa_utils::errors::SysResult;
-pub use safa_utils::syscalls::SyscallTable as SyscallNum;
+use safa_abi::errors::SysResult;
+pub use safa_abi::syscalls::SyscallTable as SyscallNum;
 
 macro_rules! err_from_u16 {
     ($result:expr) => {

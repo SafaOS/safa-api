@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod errors {
-    pub use safa_utils::errors::{ErrorStatus, SysResult};
+    pub use safa_abi::errors::{ErrorStatus, SysResult};
 
     #[cfg(any(feature = "rustc-dep-of-std", feature = "std"))]
     #[cfg_attr(feature = "rustc-dep-of-std", macro_export)]

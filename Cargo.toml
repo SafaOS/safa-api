@@ -6,6 +6,7 @@ repository = "https://github.com/SafaOS/safa-api"
 categories = ["os"]
 keywords = ["kernel", "libos"]
 license = "MIT"
+description = "A high-level API over SafaOS's syscalls"
 
 [dependencies]
 safa-abi = { version = "0.1.0" }

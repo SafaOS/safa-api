@@ -163,8 +163,9 @@ unsafe impl Send for GlobalSystemAllocator {}
 
 pub static GLOBAL_SYSTEM_ALLOCATOR: GlobalSystemAllocator = GlobalSystemAllocator::new();
 
-/// Allocates an object sized `object_size` using [`GLOBAL_SYSTEM_ALLOCATOR`]
+#[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[unsafe(no_mangle)]
+/// Allocates an object sized `object_size` using [`GLOBAL_SYSTEM_ALLOCATOR`]
 extern "C" fn syscreate(object_size: usize) -> Optional<NonNullSlice<u8>> {
     GLOBAL_SYSTEM_ALLOCATOR
         .allocate(object_size)
@@ -177,6 +178,7 @@ extern "C" fn syscreate(object_size: usize) -> Optional<NonNullSlice<u8>> {
         .into()
 }
 
+#[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn sysdestroy(object_ptr: *mut u8) {
     unsafe {

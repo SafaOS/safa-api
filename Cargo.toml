@@ -1,6 +1,6 @@
 [package]
 name = "safa-api"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 repository = "https://github.com/SafaOS/safa-api"
 categories = ["os"]
@@ -16,6 +16,7 @@ compiler_builtins = { version = "0.1", optional = true }
 
 [features]
 default = []
+std = []
 rustc-dep-of-std = [
     "core",
     "alloc",

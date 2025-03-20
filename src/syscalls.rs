@@ -109,8 +109,11 @@ fn syscall4(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize, arg4: usize)
     }
 }
 
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
-#[unsafe(no_mangle)]
 extern "C" fn syswrite(
     fd: usize,
     offset: isize,
@@ -136,8 +139,10 @@ pub fn write(fd: usize, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus>
         dest_wrote
     )
 }
-
-#[unsafe(no_mangle)]
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
 extern "C" fn sysread(
     fd: usize,
@@ -165,7 +170,10 @@ pub fn read(fd: usize, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStat
     )
 }
 
-#[unsafe(no_mangle)]
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
 extern "C" fn syssync(fd: usize) -> u16 {
     syscall1(SyscallNum::SysSync, fd)
@@ -175,8 +183,10 @@ extern "C" fn syssync(fd: usize) -> u16 {
 pub fn sync(fd: usize) -> Result<(), ErrorStatus> {
     err_from_u16!(syssync(fd))
 }
-
-#[unsafe(no_mangle)]
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
 extern "C" fn syssbrk(size: isize, target_ptr: &mut *mut u8) -> u16 {
     syscall2(
@@ -203,8 +213,10 @@ extern "C" fn sysexit(code: usize) -> ! {
 pub fn exit(code: usize) -> ! {
     sysexit(code)
 }
-
-#[unsafe(no_mangle)]
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
 extern "C" fn syschdir(buf_ptr: *const u8, buf_len: usize) -> u16 {
     syscall2(SyscallNum::SysCHDir, buf_ptr as usize, buf_len)
@@ -216,9 +228,12 @@ pub fn chdir(path: &str) -> Result<(), ErrorStatus> {
     err_from_u16!(syschdir(path.as_ptr(), path.len()))
 }
 
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 /// Gets the current working directory
 /// returns Err(ErrorStatus::Generic) if the buffer is too small to hold the cwd
-#[unsafe(no_mangle)]
 #[inline(always)]
 extern "C" fn sysgetcwd(cwd_buf_ptr: *mut u8, cwd_buf_len: usize, dest_len: &mut usize) -> u16 {
     syscall3(
@@ -278,8 +293,10 @@ impl ops::BitOr for SpawnFlags {
         Self(self.0 | rhs.0)
     }
 }
-
-#[unsafe(no_mangle)]
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
 extern "C" fn syspspawn(
     name_ptr: *const u8,
@@ -360,9 +377,11 @@ pub fn pspawn(
     let argv: &mut [&str] = &mut argv;
     unsafe { unsafe_pspawn(name, path, argv as *mut _, flags) }
 }
-
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
-#[unsafe(no_mangle)]
 extern "C" fn syswait(pid: usize, exit_code: &mut usize) -> u16 {
     syscall2(SyscallNum::SysWait, pid, exit_code as *mut _ as usize)
 }

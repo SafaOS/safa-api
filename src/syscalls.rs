@@ -202,7 +202,10 @@ pub fn sbrk(size: isize) -> Result<*mut u8, ErrorStatus> {
     err_from_u16!(syssbrk(size, &mut target_ptr), target_ptr)
 }
 
-#[unsafe(no_mangle)]
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
 #[inline(always)]
 extern "C" fn sysexit(code: usize) -> ! {
     syscall1(SyscallNum::SysExit, code);

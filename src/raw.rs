@@ -109,3 +109,26 @@ impl<T> From<Option<T>> for Optional<T> {
         }
     }
 }
+
+// TODO: consider moving this to the abi?
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum InodeType {
+    File,
+    Directory,
+    Device,
+}
+
+// TODO: consider moving this to the abi?
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct DirEntry {
+    pub kind: InodeType,
+    pub size: usize,
+    pub name_length: usize,
+    pub name: [u8; Self::MAX_NAME_LEN],
+}
+
+impl DirEntry {
+    const MAX_NAME_LEN: usize = 128;
+}

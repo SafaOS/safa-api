@@ -1,3 +1,5 @@
+use crate::raw::DirEntry;
+
 use super::errors::ErrorStatus;
 
 #[cfg(not(feature = "rustc-dep-of-std"))]
@@ -20,6 +22,19 @@ macro_rules! err_from_u16 {
     ($result:expr, $ok:expr) => {
         err_from_u16!($result).map(|()| $ok)
     };
+}
+
+#[inline(always)]
+fn syscall0(num: SyscallNum) -> u16 {
+    let result: u16;
+    unsafe {
+        asm!(
+            "int 0x80",
+            in("rax") num as usize,
+            lateout("rax") result,
+        );
+        result
+    }
 }
 
 #[inline(always)]
@@ -114,6 +129,153 @@ fn syscall4(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize, arg4: usize)
     unsafe(no_mangle)
 )]
 #[inline(always)]
+extern "C" fn sysgetdirentry(
+    path_ptr: *const u8,
+    path_len: usize,
+    dest_direntry: *mut DirEntry,
+) -> u16 {
+    syscall3(
+        SyscallNum::SysGetDirEntry,
+        path_ptr as usize,
+        path_len,
+        dest_direntry as usize,
+    )
+}
+
+#[inline]
+pub fn getdirentry(path: &str) -> Result<DirEntry, ErrorStatus> {
+    let mut dest_direntry: DirEntry = unsafe { core::mem::zeroed() };
+    err_from_u16!(
+        sysgetdirentry(path.as_ptr(), path.len(), &raw mut dest_direntry),
+        dest_direntry
+    )
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysopen(path_ptr: *const u8, path_len: usize, dest_fd: *mut usize) -> u16 {
+    syscall3(
+        SyscallNum::SysOpen,
+        path_ptr as usize,
+        path_len,
+        dest_fd as usize,
+    )
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn syscreate_file(path_ptr: *const u8, path_len: usize) -> u16 {
+    syscall2(SyscallNum::SysCreate, path_ptr as usize, path_len)
+}
+
+#[inline]
+pub fn create(path: &str) -> Result<(), ErrorStatus> {
+    err_from_u16!(syscreate_file(path.as_ptr(), path.len()))
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn syscreate_dir(path_ptr: *const u8, path_len: usize) -> u16 {
+    syscall2(SyscallNum::SysCreateDir, path_ptr as usize, path_len)
+}
+
+#[inline]
+pub fn createdir(path: &str) -> Result<(), ErrorStatus> {
+    err_from_u16!(syscreate_dir(path.as_ptr(), path.len()))
+}
+
+#[inline]
+pub fn open(path: &str) -> Result<usize, ErrorStatus> {
+    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
+    err_from_u16!(
+        sysopen(path.as_ptr(), path.len(), &raw mut dest_fd),
+        dest_fd
+    )
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysclose(fd: usize) -> u16 {
+    syscall1(SyscallNum::SysClose, fd)
+}
+
+#[inline]
+pub fn close(fd: usize) -> Result<(), ErrorStatus> {
+    err_from_u16!(sysclose(fd))
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysdiriter_close(fd: usize) -> u16 {
+    syscall1(SyscallNum::SysDirIterClose, fd)
+}
+
+#[inline]
+pub fn diriter_close(fd: usize) -> Result<(), ErrorStatus> {
+    err_from_u16!(sysdiriter_close(fd))
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysdiriter_open(path_ptr: *const u8, path_len: usize, dest_fd: *mut usize) -> u16 {
+    syscall3(
+        SyscallNum::SysDirIterOpen,
+        path_ptr as usize,
+        path_len,
+        dest_fd as usize,
+    )
+}
+
+#[inline]
+pub fn diriter_open(path: &str) -> Result<usize, ErrorStatus> {
+    let mut dest_fd: usize = 0xAAAAAAAAAAAAAAAAusize;
+    err_from_u16!(
+        sysdiriter_open(path.as_ptr(), path.len(), &raw mut dest_fd),
+        dest_fd
+    )
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysdiriter_next(dir_ri: usize, dest_direntry: *mut DirEntry) -> u16 {
+    syscall2(SyscallNum::SysDirIterNext, dir_ri, dest_direntry as usize)
+}
+
+#[inline]
+pub fn diriter_next(dir_ri: usize) -> Result<DirEntry, ErrorStatus> {
+    let mut dest_direntry: DirEntry = unsafe { core::mem::zeroed() };
+    err_from_u16!(
+        sysdiriter_next(dir_ri, &raw mut dest_direntry),
+        dest_direntry
+    )
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
 extern "C" fn syswrite(
     fd: usize,
     offset: isize,
@@ -139,6 +301,35 @@ pub fn write(fd: usize, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus>
         dest_wrote
     )
 }
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn systruncate(fd: usize, len: usize) -> u16 {
+    syscall2(SyscallNum::SysTruncate, fd, len)
+}
+
+#[inline]
+pub fn truncate(fd: usize, len: usize) -> Result<(), ErrorStatus> {
+    err_from_u16!(systruncate(fd, len))
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+pub fn sysfsize(fd: usize, dest_size: *mut usize) -> u16 {
+    syscall2(SyscallNum::SysFSize, fd, dest_size as usize)
+}
+
+pub fn fsize(fd: usize) -> Result<usize, ErrorStatus> {
+    let mut dest_size = 0;
+    err_from_u16!(sysfsize(fd, &raw mut dest_size), dest_size)
+}
+
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
@@ -210,6 +401,50 @@ pub fn sbrk(size: isize) -> Result<*mut u8, ErrorStatus> {
 extern "C" fn sysexit(code: usize) -> ! {
     syscall1(SyscallNum::SysExit, code);
     unreachable!()
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysyield() -> u16 {
+    syscall0(SyscallNum::SysYield)
+}
+
+#[inline]
+pub fn yield_now() {
+    debug_assert!(sysyield() == 0)
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysshutdown() -> ! {
+    syscall0(SyscallNum::SysShutdown);
+    unreachable!()
+}
+
+#[inline]
+pub fn shutdown() -> ! {
+    sysshutdown()
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysreboot() -> ! {
+    syscall0(SyscallNum::SysReboot);
+    unreachable!()
+}
+
+#[inline]
+pub fn reboot() -> ! {
+    sysreboot()
 }
 
 #[inline]

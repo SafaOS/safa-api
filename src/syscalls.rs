@@ -337,14 +337,14 @@ pub fn fsize(fd: usize) -> Result<usize, ErrorStatus> {
     unsafe(no_mangle)
 )]
 #[inline(always)]
-extern "C" fn sysfattrs(dest_attrs: *mut FileAttr) -> u16 {
-    syscall1(SyscallNum::SysFAttrs, dest_attrs as usize)
+extern "C" fn sysfattrs(fd: usize, dest_attrs: *mut FileAttr) -> u16 {
+    syscall2(SyscallNum::SysFAttrs, fd, dest_attrs as usize)
 }
 
 #[inline]
-pub fn fattrs() -> Result<FileAttr, ErrorStatus> {
+pub fn fattrs(fd: usize) -> Result<FileAttr, ErrorStatus> {
     let mut attrs: FileAttr = unsafe { core::mem::zeroed() };
-    err_from_u16!(sysfattrs(&raw mut attrs), attrs)
+    err_from_u16!(sysfattrs(fd, &raw mut attrs), attrs)
 }
 
 #[cfg_attr(

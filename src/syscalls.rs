@@ -4,6 +4,7 @@ use super::errors::ErrorStatus;
 
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
+use super::raw::FileAttr;
 use super::raw::{RawSlice, RawSliceMut};
 use alloc::vec::Vec;
 use core::arch::asm;
@@ -325,9 +326,25 @@ pub fn sysfsize(fd: usize, dest_size: *mut usize) -> u16 {
     syscall2(SyscallNum::SysFSize, fd, dest_size as usize)
 }
 
+#[inline]
 pub fn fsize(fd: usize) -> Result<usize, ErrorStatus> {
     let mut dest_size = 0;
     err_from_u16!(sysfsize(fd, &raw mut dest_size), dest_size)
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysfattrs(dest_attrs: *mut FileAttr) -> u16 {
+    syscall1(SyscallNum::SysFAttrs, dest_attrs as usize)
+}
+
+#[inline]
+pub fn fattrs() -> Result<FileAttr, ErrorStatus> {
+    let mut attrs: FileAttr = unsafe { core::mem::zeroed() };
+    err_from_u16!(sysfattrs(&raw mut attrs), attrs)
 }
 
 #[cfg_attr(

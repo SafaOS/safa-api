@@ -236,22 +236,14 @@ pub fn diriter_close(fd: usize) -> Result<(), ErrorStatus> {
     unsafe(no_mangle)
 )]
 #[inline(always)]
-extern "C" fn sysdiriter_open(path_ptr: *const u8, path_len: usize, dest_fd: *mut usize) -> u16 {
-    syscall3(
-        SyscallNum::SysDirIterOpen,
-        path_ptr as usize,
-        path_len,
-        dest_fd as usize,
-    )
+extern "C" fn sysdiriter_open(dir_ri: usize, dest_ri: *mut usize) -> u16 {
+    syscall2(SyscallNum::SysDirIterOpen, dir_ri, dest_ri as usize)
 }
 
 #[inline]
-pub fn diriter_open(path: &str) -> Result<usize, ErrorStatus> {
+pub fn diriter_open(dir_ri: usize) -> Result<usize, ErrorStatus> {
     let mut dest_fd: usize = 0xAAAAAAAAAAAAAAAAusize;
-    err_from_u16!(
-        sysdiriter_open(path.as_ptr(), path.len(), &raw mut dest_fd),
-        dest_fd
-    )
+    err_from_u16!(sysdiriter_open(dir_ri, &raw mut dest_fd), dest_fd)
 }
 
 #[cfg_attr(

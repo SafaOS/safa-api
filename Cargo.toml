@@ -1,6 +1,6 @@
 [package]
 name = "safa-api"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 repository = "https://github.com/SafaOS/safa-api"
 categories = ["os"]

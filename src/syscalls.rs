@@ -1,22 +1,21 @@
-use crate::raw::DirEntry;
+use crate::raw::io::DirEntry;
 
 use super::errors::ErrorStatus;
 
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
-use super::raw::FileAttr;
+use super::raw::io::FileAttr;
 use super::raw::{RawSlice, RawSliceMut};
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::{ops, ptr};
-use safa_abi::errors::SysResult;
 pub use safa_abi::syscalls::SyscallTable as SyscallNum;
 
 macro_rules! err_from_u16 {
     ($result:expr) => {
         unsafe {
-            Into::<Result<(), ErrorStatus>>::into(
-                TryInto::<SysResult>::try_into($result).unwrap_unchecked(),
+            Into::<Result<(), $crate::errors::ErrorStatus>>::into(
+                TryInto::<$crate::errors::SysResult>::try_into($result).unwrap_unchecked(),
             )
         }
     };
@@ -25,8 +24,9 @@ macro_rules! err_from_u16 {
     };
 }
 
+pub(crate) use err_from_u16;
 #[inline(always)]
-fn syscall0(num: SyscallNum) -> u16 {
+pub fn syscall0(num: SyscallNum) -> u16 {
     let result: u16;
     unsafe {
         asm!(
@@ -39,7 +39,7 @@ fn syscall0(num: SyscallNum) -> u16 {
 }
 
 #[inline(always)]
-fn syscall1(num: SyscallNum, arg1: usize) -> u16 {
+pub fn syscall1(num: SyscallNum, arg1: usize) -> u16 {
     let result: u16;
     unsafe {
         asm!(
@@ -53,7 +53,7 @@ fn syscall1(num: SyscallNum, arg1: usize) -> u16 {
 }
 
 #[inline(always)]
-fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> u16 {
+pub fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> u16 {
     let result: u16;
     unsafe {
         asm!(
@@ -68,7 +68,7 @@ fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> u16 {
 }
 
 #[inline(always)]
-fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> u16 {
+pub fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> u16 {
     let result: u16;
     unsafe {
         asm!(
@@ -84,7 +84,7 @@ fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> u16 {
 }
 
 #[inline(always)]
-fn syscall5(
+pub fn syscall5(
     num: SyscallNum,
     arg1: usize,
     arg2: usize,
@@ -109,7 +109,7 @@ fn syscall5(
 }
 
 #[inline(always)]
-fn syscall4(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> u16 {
+pub fn syscall4(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> u16 {
     let result: u16;
     unsafe {
         asm!(

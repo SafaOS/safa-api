@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::{cell::LazyCell, ops::Deref};
+
 pub mod errors {
     pub use safa_abi::errors::{ErrorStatus, SysResult};
 
@@ -34,5 +36,24 @@ pub mod errors {
 }
 
 pub mod alloc;
+pub mod process;
 pub mod raw;
 pub mod syscalls;
+
+// FIXME: introduce locks when threads are added
+pub(crate) struct Lazy<T>(core::cell::LazyCell<T>);
+impl<T> Lazy<T> {
+    pub const fn new(value: fn() -> T) -> Self {
+        Self(core::cell::LazyCell::new(value))
+    }
+}
+
+impl<T> Deref for Lazy<T> {
+    type Target = LazyCell<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+unsafe impl<T> Sync for Lazy<T> {}
+unsafe impl<T> Send for Lazy<T> {}

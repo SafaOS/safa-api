@@ -1,3 +1,4 @@
+use crate::process::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout};
 use crate::raw::io::DirEntry;
 
 use super::errors::ErrorStatus;
@@ -8,7 +9,9 @@ use super::raw::io::FileAttr;
 use super::raw::{RawSlice, RawSliceMut};
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::{ops, ptr};
+use core::ptr;
+use safa_abi::raw::processes::SpawnFlags;
+use safa_abi::raw::Optional;
 pub use safa_abi::syscalls::SyscallTable as SyscallNum;
 
 macro_rules! err_from_u16 {
@@ -526,20 +529,6 @@ pub fn getcwd() -> Result<Vec<u8>, ErrorStatus> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub struct SpawnFlags(u8);
-impl SpawnFlags {
-    pub const CLONE_RESOURCES: Self = Self(1 << 0);
-    pub const CLONE_CWD: Self = Self(1 << 1);
-}
-
-impl ops::BitOr for SpawnFlags {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
-}
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
@@ -550,25 +539,40 @@ extern "C" fn syspspawn(
     name_len: usize,
     path_ptr: *const u8,
     path_len: usize,
-    argv_ptr: *const RawSlice<u8>,
+    argv_ptr: *mut RawSlice<u8>,
     argv_len: usize,
     flags: SpawnFlags,
     dest_pid: &mut usize,
+    stdin: Optional<usize>,
+    stdout: Optional<usize>,
+    stderr: Optional<usize>,
 ) -> u16 {
-    /// the temporary config struct for the spawn syscall, passed to the syscall
-    /// because if it was passed as a bunch of arguments it would be too big to fit
-    /// inside the registers
-    #[repr(C)]
-    struct SpawnConfig {
-        name: RawSlice<u8>,
-        argv: RawSlice<RawSlice<u8>>,
-        flags: SpawnFlags,
-    }
+    use safa_abi::raw::processes::SpawnConfig;
+    use safa_abi::raw::processes::TaskMetadata;
+    let (mut stdin, mut stdout, mut stderr): (Option<_>, Option<_>, Option<_>) =
+        (stdin.into(), stdout.into(), stderr.into());
+
+    let metadata = {
+        if stdin.is_none() && stdout.is_none() && stderr.is_none() {
+            None
+        } else {
+            stdout.get_or_insert_with(|| sysmeta_stdout());
+            stdin.get_or_insert_with(|| sysmeta_stdin());
+            stderr.get_or_insert_with(|| sysmeta_stderr());
+
+            Some(TaskMetadata::new(stdout, stdin, stderr))
+        }
+    };
+
+    let metadata = metadata.as_ref();
+    let meta_ptr = metadata.map(|m| m as *const _).unwrap_or(core::ptr::null());
 
     let config = SpawnConfig {
+        version: 1,
         name: unsafe { RawSlice::from_raw_parts(name_ptr, name_len) },
-        argv: unsafe { RawSlice::from_raw_parts(argv_ptr, argv_len) },
+        argv: unsafe { RawSliceMut::from_raw_parts(argv_ptr, argv_len) },
         flags,
+        metadata: meta_ptr,
     };
     syscall4(
         SyscallNum::SysPSpawn,
@@ -580,6 +584,8 @@ extern "C" fn syspspawn(
 }
 
 /// spawns a new process
+/// # Arguments
+/// * `stdin`, `stdout`, `stderr` are the file descriptors of stdio, if None, they will be inherited from the parent
 /// # Safety
 /// `argv` must be a valid pointer to a slice of slices of `&str`
 /// `argv` will become invaild after use, using it is UB
@@ -589,6 +595,9 @@ pub unsafe fn unsafe_pspawn(
     path: &str,
     argv: *mut [&str],
     flags: SpawnFlags,
+    stdin: Option<usize>,
+    stdout: Option<usize>,
+    stderr: Option<usize>,
 ) -> Result<usize, ErrorStatus> {
     let mut pid = 0;
 
@@ -604,25 +613,31 @@ pub unsafe fn unsafe_pspawn(
             name_len,
             path.as_ptr(),
             path.len(),
-            argv.as_ptr(),
+            argv.as_mut_ptr(),
             argv.len(),
             flags,
             &mut pid,
+            stdin.into(),
+            stdout.into(),
+            stderr.into(),
         ),
         pid
     )
 }
 
-/// same as [`pspawn`] but safe because it makes it clear that `argv` is consumed`
+/// same as [`unsafe_pspawn`] but safe because it makes it clear that `argv` is consumed`
 #[inline]
 pub fn pspawn(
     name: Option<&str>,
     path: &str,
     mut argv: Vec<&str>,
     flags: SpawnFlags,
+    stdin: Option<usize>,
+    stdout: Option<usize>,
+    stderr: Option<usize>,
 ) -> Result<usize, ErrorStatus> {
     let argv: &mut [&str] = &mut argv;
-    unsafe { unsafe_pspawn(name, path, argv as *mut _, flags) }
+    unsafe { unsafe_pspawn(name, path, argv as *mut _, flags, stdin, stdout, stderr) }
 }
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),

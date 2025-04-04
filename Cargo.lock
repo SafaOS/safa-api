@@ -25,9 +25,9 @@ checksum = "aa9c45b374136f52f2d6311062c7146bff20fec063c3f5d46a410bd937746955"
 
 [[package]]
 name = "safa-abi"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "489fff90db6cab6ea73cc8f7676c2d35f1c6504d7949570a5bef24173a0d471b"
+checksum = "ff4199c25ef955e033b5dbd291ee89ae753c246b093c0039bc825b22ce1ac953"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "safa-api"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",

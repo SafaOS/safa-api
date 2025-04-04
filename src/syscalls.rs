@@ -386,6 +386,22 @@ extern "C" fn syssync(fd: usize) -> u16 {
 pub fn sync(fd: usize) -> Result<(), ErrorStatus> {
     err_from_u16!(syssync(fd))
 }
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn sysdup(fd: usize, dest_fd: &mut usize) -> u16 {
+    syscall2(SyscallNum::SysDup, fd, dest_fd as *mut _ as usize)
+}
+
+#[inline]
+pub fn dup(fd: usize) -> Result<usize, ErrorStatus> {
+    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
+    err_from_u16!(sysdup(fd, &mut dest_fd), dest_fd)
+}
+
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)

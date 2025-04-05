@@ -1,3 +1,5 @@
+//! This module exposes SafaOS's syscalls and their rust counterparts
+
 use crate::raw::io::DirEntry;
 
 use super::errors::ErrorStatus;
@@ -24,6 +26,7 @@ macro_rules! err_from_u16 {
 
 pub(crate) use err_from_u16;
 
+#[doc(hidden)]
 #[inline(always)]
 pub fn syscall0(num: SyscallNum) -> u16 {
     let result: u16;
@@ -37,6 +40,7 @@ pub fn syscall0(num: SyscallNum) -> u16 {
     }
 }
 
+#[doc(hidden)]
 #[inline(always)]
 pub fn syscall1(num: SyscallNum, arg1: usize) -> u16 {
     let result: u16;
@@ -51,6 +55,7 @@ pub fn syscall1(num: SyscallNum, arg1: usize) -> u16 {
     }
 }
 
+#[doc(hidden)]
 #[inline(always)]
 pub fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> u16 {
     let result: u16;
@@ -66,6 +71,7 @@ pub fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> u16 {
     }
 }
 
+#[doc(hidden)]
 #[inline(always)]
 pub fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> u16 {
     let result: u16;
@@ -82,6 +88,7 @@ pub fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> u16 {
     }
 }
 
+#[doc(hidden)]
 #[inline(always)]
 pub fn syscall5(
     num: SyscallNum,
@@ -148,13 +155,13 @@ macro_rules! syscall {
 pub(crate) use syscall;
 
 macro_rules! define_syscall {
-    ($num:path => { $(#[$($attrss:tt)*])* $name:ident ($($arg:ident : $ty:ty),*) unreachable }) => {
+    ($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident : $ty:ty),*) unreachable }) => {
+        $(#[$attrss])*
         #[cfg_attr(
             not(any(feature = "std", feature = "rustc-dep-of-std")),
             unsafe(no_mangle)
         )]
         #[inline(always)]
-        $(#[$($attrss)*])*
         pub extern "C" fn $name($($arg: $ty),*) -> ! {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
@@ -162,13 +169,13 @@ macro_rules! define_syscall {
             unreachable!()
         }
     };
-    ($num:path => { $(#[$($attrss:tt)*])* $name:ident ($($arg:ident : $ty:ty),*) }) => {
+    ($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident : $ty:ty),*) }) => {
+        $(#[$attrss])*
         #[cfg_attr(
             not(any(feature = "std", feature = "rustc-dep-of-std")),
             unsafe(no_mangle)
         )]
         #[inline(always)]
-        $(#[$($attrss)*])*
         pub extern "C" fn $name($($arg: $ty),*) -> u16 {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
@@ -176,8 +183,8 @@ macro_rules! define_syscall {
             result
         }
     };
-    {$($num:path => { $(#[$($attrss:tt)*])* $name:ident ($($arg:ident: $ty:ty),*) $($modifier:tt)* }),*} => {
-        $(define_syscall!($num => { $name($($arg: $ty),*) $($modifier)* });)*
+    {$($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident: $ty:ty),*) $($modifier:tt)* }),*} => {
+        $(define_syscall!($num => { $(#[$attrss])* $name($($arg: $ty),*) $($modifier)* });)*
     };
 }
 

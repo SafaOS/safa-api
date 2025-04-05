@@ -1,3 +1,10 @@
+//! A high-level API over SafaOS's syscalls
+//!
+//! for example [`self::alloc`] is a high-level userspace allocator which internally uses the [`self::syscalls::syssbrk`] syscall
+//!
+//! This crate also exposes raw SafaOS syscalls (see [`self::syscalls`])
+//! and raw SafaOS abi structures (see [`self::raw`])
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::{cell::LazyCell, ops::Deref};

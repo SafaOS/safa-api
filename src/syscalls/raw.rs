@@ -1,6 +1,9 @@
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
 
+use super::types::{
+    OptionalPtrMut, OptionalStrPtr, RequiredPtr, RequiredPtrMut, StrPtr, StrPtrMut,
+};
 use super::SyscallNum;
 use super::{define_syscall, DirEntry, FileAttr, RawSlice, RawSliceMut};
 use super::{err_from_u16, ErrorStatus};
@@ -13,8 +16,8 @@ use safa_abi::raw::Optional;
 define_syscall!(SyscallNum::SysGetDirEntry => {
     /// Gets the directory entry for the path `path` and puts it in `dest_direntry`
     /// path must be valid utf-8
-    /// `dest_direntry` can be null
-    sysgetdirentry(path_ptr: *const u8, path_len: usize, dest_direntry: *mut DirEntry)
+    /// if `dest_direntry` is not null, it will be set to the directory entry
+    sysgetdirentry(path_ptr: StrPtr, path_len: usize, dest_direntry: OptionalPtrMut<DirEntry>)
 });
 
 #[inline]
@@ -30,17 +33,17 @@ define_syscall! {
     SyscallNum::SysOpen => {
         /// Opens the file with the path `path` and puts the resource id in `dest_fd`
         /// path must be valid utf-8
-        sysopen(path_ptr: *const u8, path_len: usize, dest_fd: *mut usize)
+        sysopen(path_ptr: StrPtr, path_len: usize, dest_fd: *mut usize)
     },
     SyscallNum::SysCreate => {
         /// Creates the file with the path `path`
         /// path must be valid utf-8
-        syscreate_file(path_ptr: *const u8, path_len: usize)
+        syscreate_file(path_ptr: StrPtr, path_len: usize)
     },
     SyscallNum::SysCreateDir => {
         /// Creates the directory with the path `path`
         /// path must be valid utf-8
-        syscreate_dir(path_ptr: *const u8, path_len: usize)
+        syscreate_dir(path_ptr: StrPtr, path_len: usize)
     },
     SyscallNum::SysClose => {
         /// Closes the file with the resource id `fd`
@@ -77,7 +80,7 @@ define_syscall! {
     SyscallNum::SysDirIterOpen =>
     {
         /// Opens a directory iterator for the directory with the resource id `dir_ri`
-        sysdiriter_open(dir_ri: usize, dest_ri: *mut usize)
+        sysdiriter_open(dir_ri: usize, dest_ri: RequiredPtrMut<usize>)
     },
     SyscallNum::SysDirIterClose => {
         /// Closes a directory iterator
@@ -87,7 +90,7 @@ define_syscall! {
         /// Gets the next directory entry from a directory iterator,
         /// puts the results in `dest_direntry`,
         /// puts zeroed DirEntry in `dest_direntry` if there are no more entries
-        sysdiriter_next(dir_ri: usize, dest_direntry: *mut DirEntry)
+        sysdiriter_next(dir_ri: usize, dest_direntry: OptionalPtrMut<DirEntry>)
     }
 }
 
@@ -115,7 +118,8 @@ pub fn diriter_next(dir_ri: usize) -> Result<DirEntry, ErrorStatus> {
 define_syscall! {
     SyscallNum::SysWrite => {
         /// Writes `len` bytes from `buf` to the file with the resource id `fd` at offset `offset`
-        syswrite(fd: usize, offset: isize, buf: *const u8, len: usize, dest_wrote: *mut usize)
+        /// if `dest_wrote` is not null, it will be set to the number of bytes written
+        syswrite(fd: usize, offset: isize, buf: RequiredPtr<u8>, len: usize, dest_wrote: OptionalPtrMut<usize>)
     },
     SyscallNum::SysTruncate => {
         /// Truncates the file with the resource id `fd` to `len` bytes
@@ -123,15 +127,16 @@ define_syscall! {
     },
     SyscallNum::SysFSize => {
         /// Gets the size of the file with the resource id `fd` and puts it in `dest_size`
-        sysfsize(fd: usize, dest_size: *mut usize)
+        sysfsize(fd: usize, dest_size: OptionalPtrMut<usize>)
     },
     SyscallNum::SysFAttrs => {
         /// Gets the file attributes of the file with the resource id `fd` and puts them in `dest_attrs`
-        sysfattrs(fd: usize, dest_attrs: *mut FileAttr)
+        sysfattrs(fd: usize, dest_attrs: OptionalPtrMut<FileAttr>)
     },
     SyscallNum::SysRead => {
         /// Reads `len` bytes from the file with the resource id `fd` at offset `offset` into `buf`
-        sysread(fd: usize, offset: isize, buf: *mut u8, len: usize, dest_read: *mut usize)
+        /// if `dest_read` is not null, it will be set to the number of bytes read
+        sysread(fd: usize, offset: isize, buf: RequiredPtrMut<u8>, len: usize, dest_read: OptionalPtrMut<usize>)
     },
     SyscallNum::SysSync => {
         /// Syncs the file with the resource id `fd`
@@ -139,7 +144,7 @@ define_syscall! {
     },
     SyscallNum::SysDup => {
         /// Duplicates the file with the resource id `fd` and puts the new resource id in `dest_fd`
-        sysdup(fd: usize, dest_fd: *mut usize)
+        sysdup(fd: usize, dest_fd: RequiredPtrMut<usize>)
     }
 }
 
@@ -211,14 +216,14 @@ define_syscall! {
     SyscallNum::SysCHDir => {
         /// Changes the current working directory to the path `buf` with length `buf_len`
         /// (expects given buffer to be utf-8)
-        syschdir(buf_ptr: *const u8, buf_len: usize)
+        syschdir(buf_ptr: StrPtr, buf_len: usize)
     },
     SyscallNum::SysGetCWD => {
         /// Gets the current working directory and puts it in `cwd_buf` with length `cwd_buf_len`
         /// if `dest_len` is not null, it will be set to the length of the cwd
         /// if the cwd is too long to fit in `cwd_buf`, the syscall will return [`ErrorStatus::Generic`] (1)
         /// the cwd is currently maximumally 1024 bytes
-        sysgetcwd(cwd_buf: *mut u8, cwd_buf_len: usize, dest_len: *mut usize)
+        sysgetcwd(cwd_buf: StrPtrMut, cwd_buf_len: usize, dest_len: OptionalPtrMut<usize>)
     }
 }
 
@@ -301,14 +306,14 @@ pub fn reboot() -> ! {
 /// if `stdin`, `stdout`, or `stderr` are not `None`, the corresponding file descriptors will be inherited from the parent
 /// if they are None they will be inherited from the parent
 extern "C" fn syspspawn(
-    name_ptr: *const u8,
+    name_ptr: OptionalStrPtr,
     name_len: usize,
-    path_ptr: *const u8,
+    path_ptr: StrPtr,
     path_len: usize,
-    argv_ptr: *mut RawSlice<u8>,
+    argv_ptr: OptionalPtrMut<RawSlice<u8>>,
     argv_len: usize,
     flags: SpawnFlags,
-    dest_pid: &mut usize,
+    dest_pid: OptionalPtrMut<usize>,
     stdin: Optional<usize>,
     stdout: Optional<usize>,
     stderr: Optional<usize>,

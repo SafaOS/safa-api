@@ -90,6 +90,7 @@ define_syscall! {
         /// Gets the next directory entry from a directory iterator,
         /// puts the results in `dest_direntry`,
         /// puts zeroed DirEntry in `dest_direntry` if there are no more entries
+        /// returns [`ErrorStatus::Generic`] (1) if there are no more entries
         sysdiriter_next(dir_ri: usize, dest_direntry: OptionalPtrMut<DirEntry>)
     }
 }

@@ -1,3 +1,4 @@
+//! This module exposes raw SafaOS abi structures
 pub use safa_abi::raw::*;
 
 use crate::syscalls::types::IntoSyscallArg;

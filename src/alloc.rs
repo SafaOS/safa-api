@@ -1,3 +1,7 @@
+//! This module implements a high-level userspace allocator
+//! which internally uses the [`crate::syscalls::syssbrk`] syscall
+//! to allocate memory
+
 use crate::raw::{NonNullSlice, Optional};
 
 use super::syscalls;
@@ -161,12 +165,14 @@ impl GlobalSystemAllocator {
 unsafe impl Sync for GlobalSystemAllocator {}
 unsafe impl Send for GlobalSystemAllocator {}
 
+/// A high-level userspace allocator that internally uses the [`crate::syscalls::syssbrk`] syscall
+/// (rust wrapper)
 pub static GLOBAL_SYSTEM_ALLOCATOR: GlobalSystemAllocator = GlobalSystemAllocator::new();
 
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[unsafe(no_mangle)]
 /// Allocates an object sized `object_size` using [`GLOBAL_SYSTEM_ALLOCATOR`]
-extern "C" fn syscreate(object_size: usize) -> Optional<NonNullSlice<u8>> {
+pub extern "C" fn syscreate(object_size: usize) -> Optional<NonNullSlice<u8>> {
     GLOBAL_SYSTEM_ALLOCATOR
         .allocate(object_size)
         .map(|mut x| unsafe {
@@ -180,7 +186,10 @@ extern "C" fn syscreate(object_size: usize) -> Optional<NonNullSlice<u8>> {
 
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn sysdestroy(object_ptr: *mut u8) {
+/// Deallocates an object sized `object_size` using [`GLOBAL_SYSTEM_ALLOCATOR`]
+/// # Safety
+/// `object_ptr` must be a pointer to a valid object allocated by [`GLOBAL_SYSTEM_ALLOCATOR`]
+pub unsafe extern "C" fn sysdestroy(object_ptr: *mut u8) {
     unsafe {
         match NonNull::new(object_ptr) {
             Some(ptr) => GLOBAL_SYSTEM_ALLOCATOR.deallocate(ptr),

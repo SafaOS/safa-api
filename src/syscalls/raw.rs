@@ -1,3 +1,6 @@
+//! This module defines exposes raw SafaOS syscalls
+//! and their rust counterparts
+
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
 
@@ -199,7 +202,7 @@ pub fn dup(fd: usize) -> Result<usize, ErrorStatus> {
 define_syscall! {
     SyscallNum::SysSbrk => {
         /// Increases the range of the process's data break by `size` bytes and puts the new break pointer in `target_ptr`
-        syssbrk(size: isize, target_ptr: *mut *mut u8)
+        syssbrk(size: isize, target_ptr: OptionalPtrMut<*mut u8>)
     },
     SyscallNum::SysExit => {
         /// Exits the process with the exit code `code`

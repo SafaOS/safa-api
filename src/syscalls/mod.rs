@@ -155,7 +155,7 @@ macro_rules! define_syscall {
         )]
         #[inline(always)]
         $(#[$($attrss)*])*
-        extern "C" fn $name($($arg: $ty),*) -> ! {
+        pub extern "C" fn $name($($arg: $ty),*) -> ! {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
             _ = $crate::syscalls::syscall!($num, $( $arg.into_syscall_arg() ),*);
@@ -169,7 +169,7 @@ macro_rules! define_syscall {
         )]
         #[inline(always)]
         $(#[$($attrss)*])*
-        extern "C" fn $name($($arg: $ty),*) -> u16 {
+        pub extern "C" fn $name($($arg: $ty),*) -> u16 {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
             let result = $crate::syscalls::syscall!($num, $( $arg.into_syscall_arg() ),*);
@@ -185,5 +185,5 @@ pub(crate) use define_syscall;
 
 mod raw;
 pub use raw::*;
-
+/// Contains documentation-only types for syscall arguments
 pub mod types;

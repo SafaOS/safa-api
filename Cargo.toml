@@ -24,3 +24,8 @@ rustc-dep-of-std = [
     "compiler_builtins/rustc-dep-of-std",
     "safa-abi/rustc-dep-of-std",
 ]
+
+[package.metadata.docs.rs]
+
+default-target = "x86_64-unknown-none"
+targets = []

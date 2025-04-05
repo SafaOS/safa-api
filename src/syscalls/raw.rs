@@ -1,176 +1,14 @@
-use crate::process::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout};
-use crate::raw::io::DirEntry;
-
-use super::errors::ErrorStatus;
-
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
-use super::raw::io::FileAttr;
-use super::raw::{RawSlice, RawSliceMut};
+
+use super::SyscallNum;
+use super::{define_syscall, DirEntry, FileAttr, RawSlice, RawSliceMut};
+use super::{err_from_u16, ErrorStatus};
+use crate::process::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout};
 use alloc::vec::Vec;
-use core::arch::asm;
 use core::ptr;
 use safa_abi::raw::processes::SpawnFlags;
 use safa_abi::raw::Optional;
-pub use safa_abi::syscalls::SyscallTable as SyscallNum;
-
-macro_rules! err_from_u16 {
-    ($result:expr) => {
-        unsafe {
-            Into::<Result<(), $crate::errors::ErrorStatus>>::into(
-                TryInto::<$crate::errors::SysResult>::try_into($result).unwrap_unchecked(),
-            )
-        }
-    };
-    ($result:expr, $ok:expr) => {
-        err_from_u16!($result).map(|()| $ok)
-    };
-}
-
-pub(crate) use err_from_u16;
-
-#[inline(always)]
-pub fn syscall0(num: SyscallNum) -> u16 {
-    let result: u16;
-    unsafe {
-        asm!(
-            "int 0x80",
-            in("rax") num as usize,
-            lateout("rax") result,
-        );
-        result
-    }
-}
-
-#[inline(always)]
-pub fn syscall1(num: SyscallNum, arg1: usize) -> u16 {
-    let result: u16;
-    unsafe {
-        asm!(
-            "int 0x80",
-            in("rax") num as usize,
-            in("rdi") arg1,
-            lateout("rax") result,
-        );
-        result
-    }
-}
-
-#[inline(always)]
-pub fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> u16 {
-    let result: u16;
-    unsafe {
-        asm!(
-            "int 0x80",
-            in("rax") num as usize,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            lateout("rax") result,
-        );
-        result
-    }
-}
-
-#[inline(always)]
-pub fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> u16 {
-    let result: u16;
-    unsafe {
-        asm!(
-            "int 0x80",
-            in("rax") num as usize,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            in("rdx") arg3,
-            lateout("rax") result,
-        );
-        result
-    }
-}
-
-#[inline(always)]
-pub fn syscall5(
-    num: SyscallNum,
-    arg1: usize,
-    arg2: usize,
-    arg3: usize,
-    arg4: usize,
-    arg5: usize,
-) -> u16 {
-    let result: u16;
-    unsafe {
-        asm!(
-            "int 0x80",
-            in("rax") num as usize,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            in("rdx") arg3,
-            in("rcx") arg4,
-            in("r8") arg5,
-            lateout("rax") result,
-        );
-        result
-    }
-}
-
-#[inline(always)]
-pub fn syscall4(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> u16 {
-    let result: u16;
-    unsafe {
-        asm!(
-            "int 0x80",
-            in("rax") num as usize,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            in("rdx") arg3,
-            in("rcx") arg4,
-            lateout("rax") result,
-        );
-        result
-    }
-}
-
-macro_rules! syscall {
-    ($num: path $(,)?) => {
-        $crate::syscalls::syscall0($num)
-    };
-    ($num: path, $arg1: expr) => {
-        $crate::syscalls::syscall1($num, $arg1)
-    };
-    ($num: path, $arg1: expr, $arg2: expr) => {
-        $crate::syscalls::syscall2($num, $arg1, $arg2)
-    };
-    ($num: path, $arg1: expr, $arg2: expr, $arg3: expr) => {
-        $crate::syscalls::syscall3($num, $arg1, $arg2, $arg3)
-    };
-    ($num: path, $arg1: expr, $arg2: expr, $arg3: expr, $arg4: expr) => {
-        $crate::syscalls::syscall4($num, $arg1, $arg2, $arg3, $arg4)
-    };
-    ($num: path, $arg1: expr, $arg2: expr, $arg3: expr, $arg4: expr, $arg5: expr) => {
-        $crate::syscalls::syscall5($num, $arg1, $arg2, $arg3, $arg4, $arg5)
-    };
-}
-
-pub(crate) use syscall;
-
-macro_rules! define_syscall {
-    ($num:path => { $(#[$($attrss:tt)*])* $name:ident ($($arg:ident : $ty:ty),*) }) => {
-        #[cfg_attr(
-            not(any(feature = "std", feature = "rustc-dep-of-std")),
-            unsafe(no_mangle)
-        )]
-        #[inline(always)]
-        $(#[$($attrss)*])*
-        extern "C" fn $name($($arg: $ty),*) -> u16 {
-            let result = $crate::syscalls::syscall!($num, $( $arg as usize),*);
-            result
-        }
-    };
-    {$($num:path => { $(#[$($attrss:tt)*])* $name:ident ($($arg:ident: $ty:ty),*) }),*} => {
-        $(define_syscall!($num => { $name($($arg: $ty),*) });)*
-    };
-}
-
-pub(crate) use define_syscall;
 
 define_syscall!(SyscallNum::SysGetDirEntry => {
     /// Gets the directory entry for the path `path` and puts it in `dest_direntry`
@@ -359,11 +197,16 @@ define_syscall! {
     },
     SyscallNum::SysExit => {
         /// Exits the process with the exit code `code`
-        sysexit(code: usize)
+        sysexit(code: usize) unreachable
     },
     SyscallNum::SysYield => {
         /// Switches to the next process/thread
         sysyield()
+    },
+    SyscallNum::SysWait => {
+        /// Waits for the process with the resource id `pid` to exit
+        /// if `exit_code` is not null, it will be set to the exit code of the process
+        syswait(pid: usize, exit_code: *mut usize)
     },
     SyscallNum::SysCHDir => {
         /// Changes the current working directory to the path `buf` with length `buf_len`
@@ -386,44 +229,19 @@ pub fn sbrk(size: isize) -> Result<*mut u8, ErrorStatus> {
 }
 
 #[inline]
+pub fn exit(code: usize) -> ! {
+    sysexit(code)
+}
+
+#[inline]
 pub fn yield_now() {
     debug_assert!(sysyield() == 0)
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysshutdown() -> ! {
-    syscall0(SyscallNum::SysShutdown);
-    unreachable!()
-}
-
 #[inline]
-pub fn shutdown() -> ! {
-    sysshutdown()
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysreboot() -> ! {
-    syscall0(SyscallNum::SysReboot);
-    unreachable!()
-}
-
-#[inline]
-pub fn reboot() -> ! {
-    sysreboot()
-}
-
-#[inline]
-pub fn exit(code: usize) -> ! {
-    sysexit(code);
-    unreachable!()
+pub fn wait(pid: usize) -> Result<usize, ErrorStatus> {
+    let mut dest_exit_code = 0;
+    err_from_u16!(syswait(pid, &mut dest_exit_code), dest_exit_code)
 }
 
 #[inline]
@@ -447,6 +265,27 @@ pub fn getcwd() -> Result<Vec<u8>, ErrorStatus> {
 
     buffer.truncate(len);
     Ok(buffer)
+}
+
+define_syscall! {
+    SyscallNum::SysShutdown => {
+        /// Shuts down the system
+        sysshutdown() unreachable
+    },
+    SyscallNum::SysReboot => {
+        /// Reboots the system
+        sysreboot() unreachable
+    }
+}
+
+#[inline]
+pub fn shutdown() -> ! {
+    sysshutdown()
+}
+
+#[inline]
+pub fn reboot() -> ! {
+    sysreboot()
 }
 
 // doesn't use define_syscall because we use a different signature then the rest of the syscalls
@@ -501,7 +340,7 @@ extern "C" fn syspspawn(
         flags,
         metadata: meta_ptr,
     };
-    syscall4(
+    syscall!(
         SyscallNum::SysPSpawn,
         path_ptr as usize,
         path_len,
@@ -565,18 +404,4 @@ pub fn pspawn(
 ) -> Result<usize, ErrorStatus> {
     let argv: &mut [&str] = &mut argv;
     unsafe { unsafe_pspawn(name, path, argv as *mut _, flags, stdin, stdout, stderr) }
-}
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syswait(pid: usize, exit_code: &mut usize) -> u16 {
-    syscall2(SyscallNum::SysWait, pid, exit_code as *mut _ as usize)
-}
-
-#[inline]
-pub fn wait(pid: usize) -> Result<usize, ErrorStatus> {
-    let mut dest_exit_code = 0;
-    err_from_u16!(syswait(pid, &mut dest_exit_code), dest_exit_code)
 }

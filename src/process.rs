@@ -1,10 +1,7 @@
-use crate::syscalls::{self, SyscallNum};
+use crate::syscalls::{self, define_syscall};
 use safa_abi::{errors::ErrorStatus, raw::processes::TaskMetadata};
 
-use crate::{
-    syscalls::{err_from_u16, syscall1},
-    Lazy,
-};
+use crate::{syscalls::err_from_u16, syscalls::SyscallNum, Lazy};
 
 static META: Lazy<TaskMetadata> =
     Lazy::new(|| meta_take().expect("failed to take ownership of the task metadata"));
@@ -38,14 +35,12 @@ static STDERR: Lazy<usize> = Lazy::new(|| {
     }
 });
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysmeta_take(dest_task: *mut TaskMetadata) -> u16 {
-    syscall1(SyscallNum::SysMetaTake, dest_task as usize)
-}
+define_syscall!(SyscallNum::SysMetaTake => {
+    /// Takes ownership of the task metadata
+    /// the task metadata is used to store the stdin, stdout, and stderr file descriptors
+    /// this syscall can only be called once otherwise it will return [`ErrorStatus::Generic`] (1)
+    sysmeta_take(dest_task: *mut TaskMetadata)
+});
 
 #[inline]
 pub fn meta_take() -> Result<TaskMetadata, ErrorStatus> {

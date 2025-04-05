@@ -28,6 +28,7 @@ macro_rules! err_from_u16 {
 }
 
 pub(crate) use err_from_u16;
+
 #[inline(always)]
 pub fn syscall0(num: SyscallNum) -> u16 {
     let result: u16;
@@ -128,23 +129,55 @@ pub fn syscall4(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize, arg4: us
     }
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysgetdirentry(
-    path_ptr: *const u8,
-    path_len: usize,
-    dest_direntry: *mut DirEntry,
-) -> u16 {
-    syscall3(
-        SyscallNum::SysGetDirEntry,
-        path_ptr as usize,
-        path_len,
-        dest_direntry as usize,
-    )
+macro_rules! syscall {
+    ($num: path $(,)?) => {
+        $crate::syscalls::syscall0($num)
+    };
+    ($num: path, $arg1: expr) => {
+        $crate::syscalls::syscall1($num, $arg1)
+    };
+    ($num: path, $arg1: expr, $arg2: expr) => {
+        $crate::syscalls::syscall2($num, $arg1, $arg2)
+    };
+    ($num: path, $arg1: expr, $arg2: expr, $arg3: expr) => {
+        $crate::syscalls::syscall3($num, $arg1, $arg2, $arg3)
+    };
+    ($num: path, $arg1: expr, $arg2: expr, $arg3: expr, $arg4: expr) => {
+        $crate::syscalls::syscall4($num, $arg1, $arg2, $arg3, $arg4)
+    };
+    ($num: path, $arg1: expr, $arg2: expr, $arg3: expr, $arg4: expr, $arg5: expr) => {
+        $crate::syscalls::syscall5($num, $arg1, $arg2, $arg3, $arg4, $arg5)
+    };
 }
+
+pub(crate) use syscall;
+
+macro_rules! define_syscall {
+    ($num:path => { $(#[$($attrss:tt)*])* $name:ident ($($arg:ident : $ty:ty),*) }) => {
+        #[cfg_attr(
+            not(any(feature = "std", feature = "rustc-dep-of-std")),
+            unsafe(no_mangle)
+        )]
+        #[inline(always)]
+        $(#[$($attrss)*])*
+        extern "C" fn $name($($arg: $ty),*) -> u16 {
+            let result = $crate::syscalls::syscall!($num, $( $arg as usize),*);
+            result
+        }
+    };
+    {$($num:path => { $(#[$($attrss:tt)*])* $name:ident ($($arg:ident: $ty:ty),*) }),*} => {
+        $(define_syscall!($num => { $name($($arg: $ty),*) });)*
+    };
+}
+
+pub(crate) use define_syscall;
+
+define_syscall!(SyscallNum::SysGetDirEntry => {
+    /// Gets the directory entry for the path `path` and puts it in `dest_direntry`
+    /// path must be valid utf-8
+    /// `dest_direntry` can be null
+    sysgetdirentry(path_ptr: *const u8, path_len: usize, dest_direntry: *mut DirEntry)
+});
 
 #[inline]
 pub fn getdirentry(path: &str) -> Result<DirEntry, ErrorStatus> {
@@ -155,46 +188,26 @@ pub fn getdirentry(path: &str) -> Result<DirEntry, ErrorStatus> {
     )
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysopen(path_ptr: *const u8, path_len: usize, dest_fd: *mut usize) -> u16 {
-    syscall3(
-        SyscallNum::SysOpen,
-        path_ptr as usize,
-        path_len,
-        dest_fd as usize,
-    )
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syscreate_file(path_ptr: *const u8, path_len: usize) -> u16 {
-    syscall2(SyscallNum::SysCreate, path_ptr as usize, path_len)
-}
-
-#[inline]
-pub fn create(path: &str) -> Result<(), ErrorStatus> {
-    err_from_u16!(syscreate_file(path.as_ptr(), path.len()))
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syscreate_dir(path_ptr: *const u8, path_len: usize) -> u16 {
-    syscall2(SyscallNum::SysCreateDir, path_ptr as usize, path_len)
-}
-
-#[inline]
-pub fn createdir(path: &str) -> Result<(), ErrorStatus> {
-    err_from_u16!(syscreate_dir(path.as_ptr(), path.len()))
+define_syscall! {
+    SyscallNum::SysOpen => {
+        /// Opens the file with the path `path` and puts the resource id in `dest_fd`
+        /// path must be valid utf-8
+        sysopen(path_ptr: *const u8, path_len: usize, dest_fd: *mut usize)
+    },
+    SyscallNum::SysCreate => {
+        /// Creates the file with the path `path`
+        /// path must be valid utf-8
+        syscreate_file(path_ptr: *const u8, path_len: usize)
+    },
+    SyscallNum::SysCreateDir => {
+        /// Creates the directory with the path `path`
+        /// path must be valid utf-8
+        syscreate_dir(path_ptr: *const u8, path_len: usize)
+    },
+    SyscallNum::SysClose => {
+        /// Closes the file with the resource id `fd`
+        sysclose(fd: usize)
+    }
 }
 
 #[inline]
@@ -206,13 +219,14 @@ pub fn open(path: &str) -> Result<usize, ErrorStatus> {
     )
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysclose(fd: usize) -> u16 {
-    syscall1(SyscallNum::SysClose, fd)
+#[inline]
+pub fn create(path: &str) -> Result<(), ErrorStatus> {
+    err_from_u16!(syscreate_file(path.as_ptr(), path.len()))
+}
+
+#[inline]
+pub fn createdir(path: &str) -> Result<(), ErrorStatus> {
+    err_from_u16!(syscreate_dir(path.as_ptr(), path.len()))
 }
 
 #[inline]
@@ -220,13 +234,23 @@ pub fn close(fd: usize) -> Result<(), ErrorStatus> {
     err_from_u16!(sysclose(fd))
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysdiriter_close(fd: usize) -> u16 {
-    syscall1(SyscallNum::SysDirIterClose, fd)
+// Directory Iterator related syscalls
+define_syscall! {
+    SyscallNum::SysDirIterOpen =>
+    {
+        /// Opens a directory iterator for the directory with the resource id `dir_ri`
+        sysdiriter_open(dir_ri: usize, dest_ri: *mut usize)
+    },
+    SyscallNum::SysDirIterClose => {
+        /// Closes a directory iterator
+        sysdiriter_close(fd: usize)
+    },
+    SyscallNum::SysDirIterNext => {
+        /// Gets the next directory entry from a directory iterator,
+        /// puts the results in `dest_direntry`,
+        /// puts zeroed DirEntry in `dest_direntry` if there are no more entries
+        sysdiriter_next(dir_ri: usize, dest_direntry: *mut DirEntry)
+    }
 }
 
 #[inline]
@@ -234,28 +258,10 @@ pub fn diriter_close(fd: usize) -> Result<(), ErrorStatus> {
     err_from_u16!(sysdiriter_close(fd))
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysdiriter_open(dir_ri: usize, dest_ri: *mut usize) -> u16 {
-    syscall2(SyscallNum::SysDirIterOpen, dir_ri, dest_ri as usize)
-}
-
 #[inline]
 pub fn diriter_open(dir_ri: usize) -> Result<usize, ErrorStatus> {
     let mut dest_fd: usize = 0xAAAAAAAAAAAAAAAAusize;
     err_from_u16!(sysdiriter_open(dir_ri, &raw mut dest_fd), dest_fd)
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysdiriter_next(dir_ri: usize, dest_direntry: *mut DirEntry) -> u16 {
-    syscall2(SyscallNum::SysDirIterNext, dir_ri, dest_direntry as usize)
 }
 
 #[inline]
@@ -267,26 +273,36 @@ pub fn diriter_next(dir_ri: usize) -> Result<DirEntry, ErrorStatus> {
     )
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syswrite(
-    fd: usize,
-    offset: isize,
-    buf: *const u8,
-    len: usize,
-    dest_wrote: &mut usize,
-) -> u16 {
-    syscall5(
-        SyscallNum::SysWrite,
-        fd,
-        offset as usize,
-        buf as usize,
-        len,
-        dest_wrote as *mut _ as usize,
-    )
+// File related syscalls
+define_syscall! {
+    SyscallNum::SysWrite => {
+        /// Writes `len` bytes from `buf` to the file with the resource id `fd` at offset `offset`
+        syswrite(fd: usize, offset: isize, buf: *const u8, len: usize, dest_wrote: *mut usize)
+    },
+    SyscallNum::SysTruncate => {
+        /// Truncates the file with the resource id `fd` to `len` bytes
+        systruncate(fd: usize, len: usize)
+    },
+    SyscallNum::SysFSize => {
+        /// Gets the size of the file with the resource id `fd` and puts it in `dest_size`
+        sysfsize(fd: usize, dest_size: *mut usize)
+    },
+    SyscallNum::SysFAttrs => {
+        /// Gets the file attributes of the file with the resource id `fd` and puts them in `dest_attrs`
+        sysfattrs(fd: usize, dest_attrs: *mut FileAttr)
+    },
+    SyscallNum::SysRead => {
+        /// Reads `len` bytes from the file with the resource id `fd` at offset `offset` into `buf`
+        sysread(fd: usize, offset: isize, buf: *mut u8, len: usize, dest_read: *mut usize)
+    },
+    SyscallNum::SysSync => {
+        /// Syncs the file with the resource id `fd`
+        syssync(fd: usize)
+    },
+    SyscallNum::SysDup => {
+        /// Duplicates the file with the resource id `fd` and puts the new resource id in `dest_fd`
+        sysdup(fd: usize, dest_fd: *mut usize)
+    }
 }
 
 #[inline]
@@ -298,27 +314,9 @@ pub fn write(fd: usize, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus>
     )
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn systruncate(fd: usize, len: usize) -> u16 {
-    syscall2(SyscallNum::SysTruncate, fd, len)
-}
-
 #[inline]
 pub fn truncate(fd: usize, len: usize) -> Result<(), ErrorStatus> {
     err_from_u16!(systruncate(fd, len))
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-pub fn sysfsize(fd: usize, dest_size: *mut usize) -> u16 {
-    syscall2(SyscallNum::SysFSize, fd, dest_size as usize)
 }
 
 #[inline]
@@ -327,41 +325,10 @@ pub fn fsize(fd: usize) -> Result<usize, ErrorStatus> {
     err_from_u16!(sysfsize(fd, &raw mut dest_size), dest_size)
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysfattrs(fd: usize, dest_attrs: *mut FileAttr) -> u16 {
-    syscall2(SyscallNum::SysFAttrs, fd, dest_attrs as usize)
-}
-
 #[inline]
 pub fn fattrs(fd: usize) -> Result<FileAttr, ErrorStatus> {
     let mut attrs: FileAttr = unsafe { core::mem::zeroed() };
     err_from_u16!(sysfattrs(fd, &raw mut attrs), attrs)
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysread(
-    fd: usize,
-    offset: isize,
-    buf: *mut u8,
-    len: usize,
-    dest_read: &mut usize,
-) -> u16 {
-    syscall5(
-        SyscallNum::SysRead,
-        fd,
-        offset as usize,
-        buf as usize,
-        len,
-        dest_read as *mut _ as usize,
-    )
 }
 
 #[inline]
@@ -373,27 +340,9 @@ pub fn read(fd: usize, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStat
     )
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syssync(fd: usize) -> u16 {
-    syscall1(SyscallNum::SysSync, fd)
-}
-
 #[inline]
 pub fn sync(fd: usize) -> Result<(), ErrorStatus> {
     err_from_u16!(syssync(fd))
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysdup(fd: usize, dest_fd: &mut usize) -> u16 {
-    syscall2(SyscallNum::SysDup, fd, dest_fd as *mut _ as usize)
 }
 
 #[inline]
@@ -402,42 +351,38 @@ pub fn dup(fd: usize) -> Result<usize, ErrorStatus> {
     err_from_u16!(sysdup(fd, &mut dest_fd), dest_fd)
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syssbrk(size: isize, target_ptr: &mut *mut u8) -> u16 {
-    syscall2(
-        SyscallNum::SysSbrk,
-        size as usize,
-        target_ptr as *mut _ as usize,
-    )
+// Process related syscalls
+define_syscall! {
+    SyscallNum::SysSbrk => {
+        /// Increases the range of the process's data break by `size` bytes and puts the new break pointer in `target_ptr`
+        syssbrk(size: isize, target_ptr: *mut *mut u8)
+    },
+    SyscallNum::SysExit => {
+        /// Exits the process with the exit code `code`
+        sysexit(code: usize)
+    },
+    SyscallNum::SysYield => {
+        /// Switches to the next process/thread
+        sysyield()
+    },
+    SyscallNum::SysCHDir => {
+        /// Changes the current working directory to the path `buf` with length `buf_len`
+        /// (expects given buffer to be utf-8)
+        syschdir(buf_ptr: *const u8, buf_len: usize)
+    },
+    SyscallNum::SysGetCWD => {
+        /// Gets the current working directory and puts it in `cwd_buf` with length `cwd_buf_len`
+        /// if `dest_len` is not null, it will be set to the length of the cwd
+        /// if the cwd is too long to fit in `cwd_buf`, the syscall will return [`ErrorStatus::Generic`] (1)
+        /// the cwd is currently maximumally 1024 bytes
+        sysgetcwd(cwd_buf: *mut u8, cwd_buf_len: usize, dest_len: *mut usize)
+    }
 }
 
 #[inline]
 pub fn sbrk(size: isize) -> Result<*mut u8, ErrorStatus> {
     let mut target_ptr: *mut u8 = core::ptr::null_mut();
     err_from_u16!(syssbrk(size, &mut target_ptr), target_ptr)
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysexit(code: usize) -> ! {
-    syscall1(SyscallNum::SysExit, code);
-    unreachable!()
-}
-
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn sysyield() -> u16 {
-    syscall0(SyscallNum::SysYield)
 }
 
 #[inline]
@@ -477,15 +422,8 @@ pub fn reboot() -> ! {
 
 #[inline]
 pub fn exit(code: usize) -> ! {
-    sysexit(code)
-}
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syschdir(buf_ptr: *const u8, buf_len: usize) -> u16 {
-    syscall2(SyscallNum::SysCHDir, buf_ptr as usize, buf_len)
+    sysexit(code);
+    unreachable!()
 }
 
 #[inline]
@@ -494,62 +432,35 @@ pub fn chdir(path: &str) -> Result<(), ErrorStatus> {
     err_from_u16!(syschdir(path.as_ptr(), path.len()))
 }
 
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-/// Gets the current working directory
-/// returns Err(ErrorStatus::Generic) if the buffer is too small to hold the cwd
-#[inline(always)]
-extern "C" fn sysgetcwd(cwd_buf_ptr: *mut u8, cwd_buf_len: usize, dest_len: &mut usize) -> u16 {
-    syscall3(
-        SyscallNum::SysGetCWD,
-        cwd_buf_ptr as usize,
-        cwd_buf_len,
-        dest_len as *mut _ as usize,
-    )
-}
-
 #[inline]
 pub fn getcwd() -> Result<Vec<u8>, ErrorStatus> {
-    let do_syscall = |cwd_buf: &mut [u8]| {
-        let mut dest_len = 0;
-        err_from_u16!(
-            sysgetcwd(cwd_buf.as_mut_ptr(), cwd_buf.len(), &mut dest_len),
-            dest_len
-        )
-    };
-
-    let extend = |cwd_buf: &mut Vec<u8>| unsafe {
-        cwd_buf.reserve(128);
-        cwd_buf.set_len(cwd_buf.capacity());
-    };
-
-    let mut cwd_buf = Vec::new();
-    extend(&mut cwd_buf);
-
-    loop {
-        match do_syscall(&mut cwd_buf) {
-            Ok(len) => unsafe {
-                cwd_buf.set_len(len);
-                return Ok(cwd_buf);
-            },
-            Err(err) => {
-                if err == ErrorStatus::Generic {
-                    extend(&mut cwd_buf);
-                } else {
-                    return Err(err);
-                }
-            }
-        }
+    let mut buffer = Vec::with_capacity(safa_abi::consts::MAX_PATH_LENGTH);
+    unsafe {
+        buffer.set_len(buffer.capacity());
     }
+
+    let mut dest_len: usize = 0xAAAAAAAAAAAAAAAAusize;
+    let len = err_from_u16!(
+        sysgetcwd(buffer.as_mut_ptr(), buffer.len(), &raw mut dest_len),
+        dest_len
+    )?;
+
+    buffer.truncate(len);
+    Ok(buffer)
 }
 
+// doesn't use define_syscall because we use a different signature then the rest of the syscalls
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
 )]
 #[inline(always)]
+/// Spawns a new process with the path `path` with arguments `argv` and flags `flags`
+/// name_ptr can be null, in which case the name will be the path
+/// path and name must be valid utf-8
+/// if `dest_pid` is not null, it will be set to the pid of the new process
+/// if `stdin`, `stdout`, or `stderr` are not `None`, the corresponding file descriptors will be inherited from the parent
+/// if they are None they will be inherited from the parent
 extern "C" fn syspspawn(
     name_ptr: *const u8,
     name_len: usize,

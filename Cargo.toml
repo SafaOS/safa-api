@@ -33,3 +33,6 @@ rustc-dep-of-std = [
 
 default-target = "x86_64-unknown-none"
 targets = []
+
+[profile.release]
+lto = true

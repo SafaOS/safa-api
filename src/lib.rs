@@ -7,7 +7,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::{cell::LazyCell, ops::Deref};
+use core::{cell::LazyCell, fmt::Write, ops::Deref};
+
+use process::sysmeta_stderr;
 
 pub mod errors {
     pub use safa_abi::errors::{ErrorStatus, SysResult};
@@ -64,3 +66,43 @@ impl<T> Deref for Lazy<T> {
 
 unsafe impl<T> Sync for Lazy<T> {}
 unsafe impl<T> Send for Lazy<T> {}
+
+#[allow(unused)]
+struct Stderr;
+
+fn _print_err(str: &str) {
+    _ = syscalls::write(sysmeta_stderr(), -1, str.as_bytes());
+}
+impl Write for Stderr {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        _print_err(s);
+        Ok(())
+    }
+}
+
+#[allow(unused)]
+macro_rules! printerr {
+    ($($arg:tt)*) => {
+        _ = Stderr.write_fmt(format_args!($($arg)*));
+    };
+}
+
+#[allow(unused)]
+macro_rules! printerrln {
+    () => {
+        printerr!("\n");
+    };
+    ($($arg:tt)*) => {
+        printerr!("{}\n", format_args!($($arg)*));
+    };
+}
+
+#[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
+#[panic_handler]
+fn _panic(info: &core::panic::PanicInfo) -> ! {
+    printerrln!("Safa-API panicked: {}", info.message(),);
+    if let Some(location) = info.location() {
+        printerrln!("at {}", location);
+    }
+    syscalls::exit(1);
+}

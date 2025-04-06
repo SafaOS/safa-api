@@ -8,6 +8,10 @@ keywords = ["kernel", "libos"]
 license = "MIT"
 description = "A high-level API over SafaOS's syscalls"
 
+[lib]
+crate-type = ["staticlib", "rlib"]
+test = false
+
 [dependencies]
 safa-abi = { version = "0.2.4" }
 core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }

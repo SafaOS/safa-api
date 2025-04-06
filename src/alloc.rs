@@ -5,7 +5,7 @@
 use crate::raw::{NonNullSlice, Optional};
 
 use super::syscalls;
-use core::{cell::UnsafeCell, ptr::NonNull};
+use core::{alloc::GlobalAlloc, cell::UnsafeCell, ptr::NonNull};
 
 #[derive(Debug, Default)]
 struct Block {
@@ -165,6 +165,22 @@ impl GlobalSystemAllocator {
 unsafe impl Sync for GlobalSystemAllocator {}
 unsafe impl Send for GlobalSystemAllocator {}
 
+unsafe impl GlobalAlloc for GlobalSystemAllocator {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        self.allocate(layout.size())
+            .map(|x| x.as_ptr() as *mut u8)
+            .unwrap_or(core::ptr::null_mut())
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, _: core::alloc::Layout) {
+        self.deallocate(NonNull::new_unchecked(ptr));
+    }
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    global_allocator
+)]
 /// A high-level userspace allocator that internally uses the [`crate::syscalls::syssbrk`] syscall
 /// (rust wrapper)
 pub static GLOBAL_SYSTEM_ALLOCATOR: GlobalSystemAllocator = GlobalSystemAllocator::new();

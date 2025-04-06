@@ -5,7 +5,8 @@
 extern crate alloc;
 
 use super::types::{
-    OptionalPtrMut, OptionalStrPtr, RequiredPtr, RequiredPtrMut, StrPtr, StrPtrMut, SyscallResult,
+    OptionalPtrMut, OptionalStrPtr, Pid, RequiredPtr, RequiredPtrMut, Ri, StrPtr, StrPtrMut,
+    SyscallResult,
 };
 use super::SyscallNum;
 use super::{define_syscall, DirEntry, FileAttr, RawSlice, RawSliceMut};
@@ -35,8 +36,9 @@ pub fn getdirentry(path: &str) -> Result<DirEntry, ErrorStatus> {
 define_syscall! {
     SyscallNum::SysOpen => {
         /// Opens the file with the path `path` and puts the resource id in `dest_fd`
+        ///
         /// path must be valid utf-8
-        sysopen(path_ptr: StrPtr, path_len: usize, dest_fd: *mut usize)
+        sysopen(path_ptr: StrPtr, path_len: usize, dest_fd: *mut Ri)
     },
     SyscallNum::SysCreate => {
         /// Creates the file with the path `path`
@@ -45,17 +47,21 @@ define_syscall! {
     },
     SyscallNum::SysCreateDir => {
         /// Creates the directory with the path `path`
+        ///
         /// path must be valid utf-8
         syscreate_dir(path_ptr: StrPtr, path_len: usize)
     },
     SyscallNum::SysClose => {
         /// Closes the file with the resource id `fd`
-        sysclose(fd: usize)
+        sysclose(fd: Ri)
     }
 }
 
 #[inline]
-pub fn open(path: &str) -> Result<usize, ErrorStatus> {
+/// Opens the path `path` and returns the resource id of the file descriptor
+///
+/// see [`sysopen`] for underlying syscall
+pub fn open(path: &str) -> Result<Ri, ErrorStatus> {
     let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
     err_from_u16!(
         sysopen(path.as_ptr(), path.len(), &raw mut dest_fd),
@@ -64,17 +70,26 @@ pub fn open(path: &str) -> Result<usize, ErrorStatus> {
 }
 
 #[inline]
+/// Creates the file with the path `path`
+///
+/// see [`syscreate_file`] for underlying syscall
 pub fn create(path: &str) -> Result<(), ErrorStatus> {
     err_from_u16!(syscreate_file(path.as_ptr(), path.len()))
 }
 
 #[inline]
+/// Creates the directory with the path `path`
+///
+/// see [`syscreate_dir`] for underlying syscall
 pub fn createdir(path: &str) -> Result<(), ErrorStatus> {
     err_from_u16!(syscreate_dir(path.as_ptr(), path.len()))
 }
 
 #[inline]
-pub fn close(fd: usize) -> Result<(), ErrorStatus> {
+/// Closes the file with the resource id `fd`
+///
+/// see [`sysclose`] for underlying syscall
+pub fn close(fd: Ri) -> Result<(), ErrorStatus> {
     err_from_u16!(sysclose(fd))
 }
 
@@ -83,34 +98,47 @@ define_syscall! {
     SyscallNum::SysDirIterOpen =>
     {
         /// Opens a directory iterator for the directory with the resource id `dir_ri`
-        sysdiriter_open(dir_ri: usize, dest_ri: RequiredPtrMut<usize>)
+        sysdiriter_open(dir_ri: Ri, dest_ri: RequiredPtrMut<Ri>)
     },
     SyscallNum::SysDirIterClose => {
         /// Closes a directory iterator
-        sysdiriter_close(fd: usize)
+        sysdiriter_close(fd: Ri)
     },
     SyscallNum::SysDirIterNext => {
         /// Gets the next directory entry from a directory iterator,
+        ///
         /// puts the results in `dest_direntry`,
+        ///
         /// puts zeroed DirEntry in `dest_direntry` if there are no more entries
+        ///
         /// returns [`ErrorStatus::Generic`] (1) if there are no more entries
-        sysdiriter_next(dir_ri: usize, dest_direntry: OptionalPtrMut<DirEntry>)
+        sysdiriter_next(dir_ri: Ri, dest_direntry: OptionalPtrMut<DirEntry>)
     }
 }
 
 #[inline]
-pub fn diriter_close(fd: usize) -> Result<(), ErrorStatus> {
+/// Closes the directory iterator with the resource id `fd`
+///
+/// see [`sysdiriter_close`] for underlying syscall
+pub fn diriter_close(fd: Ri) -> Result<(), ErrorStatus> {
     err_from_u16!(sysdiriter_close(fd))
 }
 
 #[inline]
-pub fn diriter_open(dir_ri: usize) -> Result<usize, ErrorStatus> {
+/// Opens a directory iterator for the directory with the resource id `dir_ri`,
+/// returns the resource id of the directory iterator
+///
+/// see [`sysdiriter_open`] for underlying syscall
+pub fn diriter_open(dir_ri: Ri) -> Result<Ri, ErrorStatus> {
     let mut dest_fd: usize = 0xAAAAAAAAAAAAAAAAusize;
     err_from_u16!(sysdiriter_open(dir_ri, &raw mut dest_fd), dest_fd)
 }
 
 #[inline]
-pub fn diriter_next(dir_ri: usize) -> Result<DirEntry, ErrorStatus> {
+/// Gets the next directory entry from a directory iterator,
+///
+/// see [`sysdiriter_next`] for underlying syscall
+pub fn diriter_next(dir_ri: Ri) -> Result<DirEntry, ErrorStatus> {
     let mut dest_direntry: DirEntry = unsafe { core::mem::zeroed() };
     err_from_u16!(
         sysdiriter_next(dir_ri, &raw mut dest_direntry),
@@ -122,38 +150,42 @@ pub fn diriter_next(dir_ri: usize) -> Result<DirEntry, ErrorStatus> {
 define_syscall! {
     SyscallNum::SysWrite => {
         /// Writes `len` bytes from `buf` to the file with the resource id `fd` at offset `offset`
+        ///
         /// if `dest_wrote` is not null, it will be set to the number of bytes written
-        syswrite(fd: usize, offset: isize, buf: RequiredPtr<u8>, len: usize, dest_wrote: OptionalPtrMut<usize>)
+        syswrite(fd: Ri, offset: isize, buf: RequiredPtr<u8>, len: usize, dest_wrote: OptionalPtrMut<usize>)
     },
     SyscallNum::SysTruncate => {
         /// Truncates the file with the resource id `fd` to `len` bytes
-        systruncate(fd: usize, len: usize)
+        systruncate(fd: Ri, len: usize)
     },
     SyscallNum::SysFSize => {
         /// Gets the size of the file with the resource id `fd` and puts it in `dest_size`
-        sysfsize(fd: usize, dest_size: OptionalPtrMut<usize>)
+        sysfsize(fd: Ri, dest_size: OptionalPtrMut<usize>)
     },
     SyscallNum::SysFAttrs => {
         /// Gets the file attributes of the file with the resource id `fd` and puts them in `dest_attrs`
-        sysfattrs(fd: usize, dest_attrs: OptionalPtrMut<FileAttr>)
+        sysfattrs(fd: Ri, dest_attrs: OptionalPtrMut<FileAttr>)
     },
     SyscallNum::SysRead => {
         /// Reads `len` bytes from the file with the resource id `fd` at offset `offset` into `buf`
+        ///
         /// if `dest_read` is not null, it will be set to the number of bytes read
-        sysread(fd: usize, offset: isize, buf: RequiredPtrMut<u8>, len: usize, dest_read: OptionalPtrMut<usize>)
+        sysread(fd: Ri, offset: isize, buf: RequiredPtrMut<u8>, len: usize, dest_read: OptionalPtrMut<usize>)
     },
     SyscallNum::SysSync => {
-        /// Syncs the file with the resource id `fd`
-        syssync(fd: usize)
+        /// Syncs the resource with the resource id `fd`
+        syssync(ri: Ri)
     },
     SyscallNum::SysDup => {
-        /// Duplicates the file with the resource id `fd` and puts the new resource id in `dest_fd`
-        sysdup(fd: usize, dest_fd: RequiredPtrMut<usize>)
+        /// Duplicates the resource refered to by the resource id `ri` and puts the new resource id in `dest_ri`
+        sysdup(ri: Ri, dest_ri: RequiredPtrMut<Ri>)
     }
 }
 
 #[inline]
-pub fn write(fd: usize, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus> {
+/// Writes `buf.len()` bytes from `buf` to the file with the resource id `fd` at offset `offset`
+/// and returns the number of bytes written
+pub fn write(fd: Ri, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus> {
     let mut dest_wrote = 0;
     err_from_u16!(
         syswrite(fd, offset, buf.as_ptr(), buf.len(), &mut dest_wrote),
@@ -162,24 +194,28 @@ pub fn write(fd: usize, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus>
 }
 
 #[inline]
-pub fn truncate(fd: usize, len: usize) -> Result<(), ErrorStatus> {
+/// Truncates the file with the resource id `fd` to `len` bytes
+pub fn truncate(fd: Ri, len: usize) -> Result<(), ErrorStatus> {
     err_from_u16!(systruncate(fd, len))
 }
 
 #[inline]
-pub fn fsize(fd: usize) -> Result<usize, ErrorStatus> {
+/// Gets the size of the file with the resource id `fd`
+pub fn fsize(fd: Ri) -> Result<usize, ErrorStatus> {
     let mut dest_size = 0;
     err_from_u16!(sysfsize(fd, &raw mut dest_size), dest_size)
 }
 
 #[inline]
-pub fn fattrs(fd: usize) -> Result<FileAttr, ErrorStatus> {
+/// Gets the file attributes of the file with the resource id `fd`
+pub fn fattrs(fd: Ri) -> Result<FileAttr, ErrorStatus> {
     let mut attrs: FileAttr = unsafe { core::mem::zeroed() };
     err_from_u16!(sysfattrs(fd, &raw mut attrs), attrs)
 }
 
 #[inline]
-pub fn read(fd: usize, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
+/// Reads `buf.len()` bytes from the file with the resource id `fd` at offset `offset` into `buf`
+pub fn read(fd: Ri, offset: isize, buf: &mut [u8]) -> Result<Ri, ErrorStatus> {
     let mut dest_read = 0;
     err_from_u16!(
         sysread(fd, offset, buf.as_mut_ptr(), buf.len(), &mut dest_read),
@@ -188,14 +224,17 @@ pub fn read(fd: usize, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStat
 }
 
 #[inline]
-pub fn sync(fd: usize) -> Result<(), ErrorStatus> {
-    err_from_u16!(syssync(fd))
+/// Syncs the resource with the resource id `ri`
+pub fn sync(ri: Ri) -> Result<(), ErrorStatus> {
+    err_from_u16!(syssync(ri))
 }
 
 #[inline]
-pub fn dup(fd: usize) -> Result<usize, ErrorStatus> {
-    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
-    err_from_u16!(sysdup(fd, &mut dest_fd), dest_fd)
+/// Duplicates the resource refered to by the resource id `ri`
+/// and returns the new resource id
+pub fn dup(ri: Ri) -> Result<Ri, ErrorStatus> {
+    let mut dest_ri = 0xAAAAAAAAAAAAAAAAusize;
+    err_from_u16!(sysdup(ri, &mut dest_ri), dest_ri)
 }
 
 // Process related syscalls
@@ -215,7 +254,7 @@ define_syscall! {
     SyscallNum::SysWait => {
         /// Waits for the process with the resource id `pid` to exit
         /// if `exit_code` is not null, it will be set to the exit code of the process
-        syswait(pid: usize, exit_code: *mut usize)
+        syswait(pid: Pid, exit_code: *mut usize)
     },
     SyscallNum::SysCHDir => {
         /// Changes the current working directory to the path `buf` with length `buf_len`
@@ -232,6 +271,10 @@ define_syscall! {
 }
 
 #[inline]
+/// Increases the range of the process's data break by `size` bytes
+/// returns the new break pointer
+///
+/// you should probably use [`crate::alloc::GLOBAL_SYSTEM_ALLOCATOR`] instead for allocating memory
 pub fn sbrk(size: isize) -> Result<*mut u8, ErrorStatus> {
     let mut target_ptr: *mut u8 = core::ptr::null_mut();
     err_from_u16!(syssbrk(size, &mut target_ptr), target_ptr)
@@ -248,19 +291,26 @@ pub fn yield_now() {
 }
 
 #[inline]
-pub fn wait(pid: usize) -> Result<usize, ErrorStatus> {
+/// Waits for the process with the resource id `pid` to exit
+/// and returns the exit code of the process
+///
+/// will return 0 as an exit code if process wasn't found
+pub fn wait(pid: Pid) -> Result<usize, ErrorStatus> {
     let mut dest_exit_code = 0;
     err_from_u16!(syswait(pid, &mut dest_exit_code), dest_exit_code)
 }
 
 #[inline]
+/// Changes the current work dir to `path`
 pub fn chdir(path: &str) -> Result<(), ErrorStatus> {
     let path = path.as_bytes();
     err_from_u16!(syschdir(path.as_ptr(), path.len()))
 }
 
+use alloc::string::String;
 #[inline]
-pub fn getcwd() -> Result<Vec<u8>, ErrorStatus> {
+/// Retrives the current work dir
+pub fn getcwd() -> Result<String, ErrorStatus> {
     let mut buffer = Vec::with_capacity(safa_abi::consts::MAX_PATH_LENGTH);
     unsafe {
         buffer.set_len(buffer.capacity());
@@ -273,7 +323,7 @@ pub fn getcwd() -> Result<Vec<u8>, ErrorStatus> {
     )?;
 
     buffer.truncate(len);
-    Ok(buffer)
+    unsafe { Ok(String::from_utf8_unchecked(buffer)) }
 }
 
 define_syscall! {
@@ -317,7 +367,7 @@ extern "C" fn syspspawn(
     argv_ptr: OptionalPtrMut<RawSlice<u8>>,
     argv_len: usize,
     flags: SpawnFlags,
-    dest_pid: OptionalPtrMut<usize>,
+    dest_pid: OptionalPtrMut<Pid>,
     stdin: Optional<usize>,
     stdout: Optional<usize>,
     stderr: Optional<usize>,

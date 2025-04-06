@@ -121,3 +121,10 @@ impl SyscallResult {
         self.0 == 0
     }
 }
+
+/// A process id
+pub type Pid = usize;
+
+/// A resource id
+/// this is a generic type that can be used to represent any resource (file, directory, device, directory iterator, etc.)
+pub type Ri = usize;

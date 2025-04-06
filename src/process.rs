@@ -26,6 +26,7 @@ static STDOUT: Lazy<usize> = Lazy::new(|| {
     }
 });
 
+use syscalls::types::SyscallResult;
 static STDERR: Lazy<usize> = Lazy::new(|| {
     let stderr: Option<usize> = META.stderr.into();
     if let Some(stderr) = stderr {

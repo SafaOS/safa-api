@@ -5,7 +5,7 @@
 extern crate alloc;
 
 use super::types::{
-    OptionalPtrMut, OptionalStrPtr, RequiredPtr, RequiredPtrMut, StrPtr, StrPtrMut,
+    OptionalPtrMut, OptionalStrPtr, RequiredPtr, RequiredPtrMut, StrPtr, StrPtrMut, SyscallResult,
 };
 use super::SyscallNum;
 use super::{define_syscall, DirEntry, FileAttr, RawSlice, RawSliceMut};
@@ -244,7 +244,7 @@ pub fn exit(code: usize) -> ! {
 
 #[inline]
 pub fn yield_now() {
-    debug_assert!(sysyield() == 0)
+    debug_assert!(sysyield().is_success())
 }
 
 #[inline]
@@ -321,7 +321,7 @@ extern "C" fn syspspawn(
     stdin: Optional<usize>,
     stdout: Optional<usize>,
     stderr: Optional<usize>,
-) -> u16 {
+) -> SyscallResult {
     use safa_abi::raw::processes::SpawnConfig;
     use safa_abi::raw::processes::TaskMetadata;
     let (mut stdin, mut stdout, mut stderr): (Option<_>, Option<_>, Option<_>) =

@@ -41,8 +41,6 @@ impl<T> IntoSyscallArg for *mut T {
     }
 }
 
-// used by Documentation
-#[allow(unused)]
 use super::ErrorStatus;
 
 /// A nullable muttable pointer to `T`
@@ -101,3 +99,25 @@ pub type StrPtrMut = RequiredPtrMut<u8>;
 ///
 /// can be null
 pub type OptionalStrPtr = OptionalPtr<u8>;
+
+/// An opaque type that represents a syscall result
+/// the underlying type is a 16 bit unsigned integer, in which 0 is success and any other value is in error
+/// respresented by the [`ErrorStatus`] enum
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct SyscallResult(u16);
+
+impl SyscallResult {
+    #[inline(always)]
+    pub const fn into_result(self) -> Result<(), ErrorStatus> {
+        match self.0 {
+            0 => Ok(()),
+            x => unsafe { Err(core::mem::transmute(x)) },
+        }
+    }
+
+    #[inline(always)]
+    pub const fn is_success(self) -> bool {
+        self.0 == 0
+    }
+}

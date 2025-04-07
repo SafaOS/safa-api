@@ -7,7 +7,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::{cell::LazyCell, fmt::Write, ops::Deref};
+use core::{cell::LazyCell, fmt::Write, mem::MaybeUninit, ops::Deref, ptr::NonNull};
 
 use process::sysmeta_stderr;
 
@@ -105,4 +105,36 @@ fn _panic(info: &core::panic::PanicInfo) -> ! {
         printerrln!("at {}", location);
     }
     syscalls::exit(1);
+}
+
+#[inline(always)]
+unsafe fn alloca_perm(size: usize) -> &'static mut [MaybeUninit<u8>] {
+    unsafe {
+        let ptr: usize;
+        core::arch::asm!("mov {}, rsp; sub rsp, {}", in(reg) size, out(reg) ptr);
+        core::slice::from_raw_parts_mut(ptr as *mut MaybeUninit<u8>, size)
+    }
+}
+
+/// Converts argv to a CStr and calls `main` with the new argv
+/// and exits with the result
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn _c_start_inner(
+    argc: usize,
+    argv: *mut (NonNull<u8>, usize),
+    main: extern "C" fn(i32, *const NonNull<u8>) -> i32,
+) -> ! {
+    let argv_slice = unsafe { core::slice::from_raw_parts(argv, argc) };
+    let bytes = argc * size_of::<usize>();
+
+    let c_argv_slice = unsafe { alloca_perm(bytes) };
+    let c_argv_slice_ptr = c_argv_slice.as_mut_ptr() as *mut NonNull<u8>;
+    let c_argv_slice = unsafe { core::slice::from_raw_parts_mut(c_argv_slice_ptr, argc) };
+
+    for (i, (arg_ptr, _)) in argv_slice.iter().enumerate() {
+        c_argv_slice[i] = *arg_ptr;
+    }
+
+    let result = main(argc as i32, c_argv_slice_ptr as *const _);
+    syscalls::exit(result as usize)
 }

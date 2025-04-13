@@ -368,9 +368,9 @@ extern "C" fn syspspawn(
     argv_len: usize,
     flags: SpawnFlags,
     dest_pid: OptionalPtrMut<Pid>,
-    stdin: Optional<usize>,
-    stdout: Optional<usize>,
-    stderr: Optional<usize>,
+    stdin: Optional<Ri>,
+    stdout: Optional<Ri>,
+    stderr: Optional<Ri>,
 ) -> SyscallResult {
     use safa_abi::raw::processes::SpawnConfig;
     use safa_abi::raw::processes::TaskMetadata;
@@ -420,10 +420,10 @@ pub unsafe fn unsafe_pspawn(
     path: &str,
     argv: *mut [&str],
     flags: SpawnFlags,
-    stdin: Option<usize>,
-    stdout: Option<usize>,
-    stderr: Option<usize>,
-) -> Result<usize, ErrorStatus> {
+    stdin: Option<Ri>,
+    stdout: Option<Ri>,
+    stderr: Option<Ri>,
+) -> Result<Pid, ErrorStatus> {
     let mut pid = 0;
 
     let name = name.map(|s| s.as_bytes());
@@ -457,10 +457,10 @@ pub fn pspawn(
     path: &str,
     mut argv: Vec<&str>,
     flags: SpawnFlags,
-    stdin: Option<usize>,
-    stdout: Option<usize>,
-    stderr: Option<usize>,
-) -> Result<usize, ErrorStatus> {
+    stdin: Option<Ri>,
+    stdout: Option<Ri>,
+    stderr: Option<Ri>,
+) -> Result<Pid, ErrorStatus> {
     let argv: &mut [&str] = &mut argv;
     unsafe { unsafe_pspawn(name, path, argv as *mut _, flags, stdin, stdout, stderr) }
 }

@@ -7,9 +7,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::{cell::LazyCell, fmt::Write, ops::Deref, ptr::NonNull};
+use core::{cell::LazyCell, fmt::Write, ops::Deref};
 
-use alloc::GLOBAL_SYSTEM_ALLOCATOR;
 use process::sysmeta_stderr;
 
 pub mod errors {
@@ -108,27 +107,4 @@ fn _panic(info: &core::panic::PanicInfo) -> ! {
         printerrln!("at {}", location);
     }
     syscalls::exit(1);
-}
-
-/// Converts argv to a CStr and calls `main` with the new argv
-/// and exits with the result
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _c_start_inner(
-    argc: usize,
-    argv: *mut (NonNull<u8>, usize),
-    main: extern "C" fn(i32, *const NonNull<u8>) -> i32,
-) -> ! {
-    let argv_slice = unsafe { core::slice::from_raw_parts(argv, argc) };
-    let bytes = argc * size_of::<usize>();
-
-    let c_argv_bytes = GLOBAL_SYSTEM_ALLOCATOR.allocate(bytes).unwrap();
-    let c_argv_slice =
-        unsafe { core::slice::from_raw_parts_mut(c_argv_bytes.as_ptr() as *mut NonNull<u8>, argc) };
-
-    for (i, (arg_ptr, _)) in argv_slice.iter().enumerate() {
-        c_argv_slice[i] = *arg_ptr;
-    }
-
-    let result = main(argc as i32, c_argv_slice.as_ptr());
-    syscalls::exit(result as usize)
 }

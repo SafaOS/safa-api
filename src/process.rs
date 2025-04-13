@@ -1,4 +1,13 @@
-use crate::syscalls::{self, define_syscall};
+//! Module for process-related high-level functions over process related syscalls
+//!
+//! Such as api initialization functions [`_c_api_init`], environment variables, and process arguments
+
+use core::ptr::NonNull;
+
+use crate::{
+    alloc::GLOBAL_SYSTEM_ALLOCATOR,
+    syscalls::{self, define_syscall},
+};
 use safa_abi::{errors::ErrorStatus, raw::processes::TaskMetadata};
 
 use crate::{syscalls::err_from_u16, syscalls::SyscallNum, Lazy};
@@ -77,4 +86,29 @@ pub extern "C" fn sysmeta_stderr() -> usize {
 #[inline(always)]
 pub extern "C" fn sysmeta_stdin() -> usize {
     **STDIN
+}
+
+/// Initializes the safa-api, calls `main`, and exits with the result
+/// main are designed as C main function,
+///
+/// this function is designed to be called from C code at _start before main and main should be passed as a parameter
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn _c_api_init(
+    argc: usize,
+    argv: *mut (NonNull<u8>, usize),
+    main: extern "C" fn(argc: i32, argv: *const NonNull<u8>) -> i32,
+) -> ! {
+    let argv_slice = unsafe { core::slice::from_raw_parts(argv, argc) };
+    let bytes = argc * size_of::<usize>();
+
+    let c_argv_bytes = GLOBAL_SYSTEM_ALLOCATOR.allocate(bytes).unwrap();
+    let c_argv_slice =
+        unsafe { core::slice::from_raw_parts_mut(c_argv_bytes.as_ptr() as *mut NonNull<u8>, argc) };
+
+    for (i, (arg_ptr, _)) in argv_slice.iter().enumerate() {
+        c_argv_slice[i] = *arg_ptr;
+    }
+
+    let result = main(argc as i32, c_argv_slice.as_ptr());
+    syscalls::exit(result as usize)
 }

@@ -2,20 +2,25 @@
 //!
 //! Such as api initialization functions [`_c_api_init`] and [`sysapi_init`], environment variables, and process arguments
 
-use core::{cell::UnsafeCell, mem::MaybeUninit, ptr::NonNull};
+use core::{cell::UnsafeCell, ffi::CStr, mem::MaybeUninit, ptr::NonNull};
 
+#[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
+extern crate alloc;
 use crate::{
     alloc::GLOBAL_SYSTEM_ALLOCATOR,
     syscalls::{self, define_syscall},
 };
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use safa_abi::{
     errors::ErrorStatus,
-    raw::{processes::TaskMetadata, NonNullSlice, Optional, RawSliceMut},
+    raw::{processes::TaskMetadata, NonNullSlice, Optional, RawSlice, RawSliceMut},
 };
 
 use crate::{syscalls::err_from_u16, syscalls::SyscallNum, Lazy};
-
+use alloc::ffi::CString;
 // args
+
 #[derive(Debug, Clone, Copy)]
 struct RawArgs {
     args: NonNull<[NonNullSlice<u8>]>,
@@ -36,6 +41,10 @@ impl RawArgs {
 
     unsafe fn into_slice(self) -> &'static [NonNullSlice<u8>] {
         unsafe { self.args.as_ref() }
+    }
+
+    unsafe fn into_mut_slice(mut self) -> &'static mut [NonNullSlice<u8>] {
+        unsafe { self.args.as_mut() }
     }
 }
 
@@ -68,6 +77,16 @@ impl RawArgsStatic {
     unsafe fn get_raw(&self) -> Option<RawArgs> {
         unsafe { (*self.0.get()).assume_init() }
     }
+
+    unsafe fn as_slice(&self) -> &'static [NonNullSlice<u8>] {
+        unsafe {
+            if let Some(raw) = self.get_raw() {
+                raw.into_slice()
+            } else {
+                &mut []
+            }
+        }
+    }
 }
 
 static RAW_ARGS: RawArgsStatic = RawArgsStatic::new();
@@ -92,6 +111,198 @@ pub extern "C" fn sysget_arg(index: usize) -> Optional<NonNullSlice<u8>> {
     unsafe { RAW_ARGS.get(index).into() }
 }
 
+// Environment variables
+
+struct EnvVars {
+    env: Vec<(Box<[u8]>, Box<CStr>)>,
+    /// hints the size of the environment variables in bytes (key.length + value.length + 1 ('='))
+    /// which can then be used to duplicate the environment variables
+    size_hint: usize,
+}
+
+impl EnvVars {
+    pub const fn new() -> Self {
+        Self {
+            env: Vec::new(),
+            size_hint: 0,
+        }
+    }
+
+    pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
+        for (k, v) in &self.env {
+            if &**k == key {
+                return Some(v.to_bytes());
+            }
+        }
+        None
+    }
+
+    /// # Safety
+    /// This function is unsafe because it should only be used if there is no environment variable with the same key.
+    /// otherwise use [`EnvVars::set`]
+    #[inline(always)]
+    pub unsafe fn push(&mut self, key: &[u8], value: &[u8]) {
+        let cstr = CString::new(value)
+            .unwrap_or_else(|_| CStr::from_bytes_until_nul(value).unwrap().into());
+
+        self.env
+            .push((key.to_vec().into_boxed_slice(), cstr.into_boxed_c_str()));
+
+        self.size_hint += key.len() + value.len() + 1;
+    }
+
+    #[inline(always)]
+    pub fn set(&mut self, key: &[u8], value: &[u8]) {
+        for (k, v) in &mut self.env {
+            if &**k == key {
+                let old_len = v.count_bytes();
+
+                let new_value = CString::new(value)
+                    .unwrap_or_else(|_| CStr::from_bytes_until_nul(value).unwrap().into());
+                *v = new_value.into_boxed_c_str();
+                self.size_hint -= old_len;
+                self.size_hint += value.len();
+                return;
+            }
+        }
+
+        unsafe {
+            self.push(key, value);
+        }
+    }
+
+    #[inline(always)]
+    pub fn remove(&mut self, key: &[u8]) {
+        for (i, (k, v)) in self.env.iter().enumerate() {
+            if &**k == key {
+                // order doesn't matter
+                self.size_hint -= key.len() + 1 + v.count_bytes();
+                self.env.swap_remove(i);
+                return;
+            }
+        }
+    }
+
+    /// Insert a raw slice of environment variables into the environment.
+    /// # Safety
+    /// This function is unsafe because any usage of [`RawSlice<T>`] is unsafe.
+    unsafe fn insert_raw(&mut self, raw: &[NonNullSlice<u8>]) {
+        self.env.reserve(raw.len());
+
+        for slice in raw {
+            let slice = slice.into_slice_mut();
+            let mut spilt = slice.splitn(2, |c| *c == b'=');
+
+            let Some(key) = spilt.next() else {
+                continue;
+            };
+
+            let value = spilt.next();
+            let value = value.unwrap_or_default();
+
+            self.push(key, value);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.env.clear();
+        self.size_hint = 0;
+    }
+}
+
+// TODO: refactor all of this
+static RAW_ENV: RawArgsStatic = RawArgsStatic::new();
+
+// Lazy always implements Send and Sync LOL
+static ENV: Lazy<UnsafeCell<EnvVars>> = Lazy::new(|| {
+    let mut env = EnvVars::new();
+    unsafe { env.insert_raw(RAW_ENV.as_slice()) };
+    UnsafeCell::new(env)
+});
+
+#[inline]
+pub fn env_get(key: &[u8]) -> Option<&[u8]> {
+    let env = unsafe { &*ENV.get() };
+    env.get(key)
+}
+
+#[inline]
+pub fn env_set(key: &[u8], value: &[u8]) {
+    let env = unsafe { &mut *ENV.get() };
+    env.set(key, value);
+}
+
+#[inline]
+pub fn env_remove(key: &[u8]) {
+    let env = unsafe { &mut *ENV.get() };
+    env.remove(key);
+}
+
+#[inline]
+pub fn env_clear() {
+    let env = unsafe { &mut *ENV.get() };
+    env.clear();
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+/// Get an environment variable by key.
+pub extern "C" fn sysenv_get(key: RawSlice<u8>) -> Optional<RawSlice<u8>> {
+    unsafe {
+        let Some(key) = key.into_slice() else {
+            return Optional::None;
+        };
+
+        env_get(key).map(|slice| RawSlice::from_slice(slice)).into()
+    }
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+/// Set an environment variable by key.
+pub extern "C" fn sysenv_set(key: RawSlice<u8>, value: RawSlice<u8>) {
+    unsafe {
+        let Some(key) = key.into_slice() else {
+            return;
+        };
+        let value = if let Some(value) = value.into_slice() {
+            value
+        } else {
+            &[]
+        };
+
+        env_set(key, value);
+    }
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+/// Remove an environment variable by key.
+pub extern "C" fn sysenv_remove(key: RawSlice<u8>) {
+    unsafe {
+        let Some(key) = key.into_slice() else {
+            return;
+        };
+
+        env_remove(key);
+    }
+}
+
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+/// Clear all environment variables.
+pub extern "C" fn sysenv_clear() {
+    env_clear();
+}
+
 /// An iterator over the arguments passed to the program.
 pub struct ArgsIter {
     args: &'static [NonNullSlice<u8>],
@@ -100,15 +311,8 @@ pub struct ArgsIter {
 
 impl ArgsIter {
     pub fn get() -> Self {
-        unsafe {
-            let args = if let Some(raw) = RAW_ARGS.get_raw() {
-                raw.into_slice()
-            } else {
-                &[]
-            };
-
-            Self { args, index: 0 }
-        }
+        let args = unsafe { RAW_ARGS.as_slice() };
+        Self { args, index: 0 }
     }
 
     pub fn next(&mut self) -> Option<NonNullSlice<u8>> {
@@ -213,14 +417,27 @@ fn init_args(args: RawSliceMut<NonNullSlice<u8>>) {
     }
 }
 
+fn init_env(env: RawSliceMut<NonNullSlice<u8>>) {
+    unsafe {
+        let slice = env
+            .into_slice_mut()
+            .map(|inner| RawArgs::new(NonNull::new_unchecked(inner as *mut _)));
+        RAW_ENV.init(slice)
+    }
+}
+
 /// Initializes the safa-api
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
 )]
 #[inline(always)]
-pub extern "C" fn sysapi_init(args: RawSliceMut<NonNullSlice<u8>>) {
+pub extern "C" fn sysapi_init(
+    args: RawSliceMut<NonNullSlice<u8>>,
+    env: RawSliceMut<NonNullSlice<u8>>,
+) {
     init_args(args);
+    init_env(env);
 }
 
 /// Initializes the safa-api, converts arguments to C-style arguments, calls `main`, and exits with the result
@@ -234,21 +451,33 @@ pub extern "C" fn sysapi_init(args: RawSliceMut<NonNullSlice<u8>>) {
 )]
 pub unsafe extern "C" fn _c_api_init(
     args: RawSliceMut<NonNullSlice<u8>>,
+    env: RawSliceMut<NonNullSlice<u8>>,
     main: extern "C" fn(argc: i32, argv: *const NonNull<u8>) -> i32,
 ) -> ! {
-    sysapi_init(args);
-    let argv_slice = unsafe { args.into_slice_mut().unwrap_or(&mut []) };
-    let bytes = args.len() * size_of::<usize>();
+    sysapi_init(args, env);
 
-    let c_argv_bytes = GLOBAL_SYSTEM_ALLOCATOR.allocate(bytes).unwrap();
-    let c_argv_slice = unsafe {
-        core::slice::from_raw_parts_mut(c_argv_bytes.as_ptr() as *mut NonNull<u8>, args.len())
-    };
+    // Convert SafaOS `_start` arguments to `main` arguments
+    fn c_main_args(args: RawSliceMut<NonNullSlice<u8>>) -> (i32, *const NonNull<u8>) {
+        let argv_slice = unsafe { args.into_slice_mut().unwrap_or_default() };
+        if argv_slice.is_empty() {
+            return (0, core::ptr::null());
+        }
 
-    for (i, arg) in argv_slice.iter().enumerate() {
-        c_argv_slice[i] = arg.as_non_null();
+        let bytes = args.len() * size_of::<usize>();
+
+        let c_argv_bytes = GLOBAL_SYSTEM_ALLOCATOR.allocate(bytes).unwrap();
+        let c_argv_slice = unsafe {
+            core::slice::from_raw_parts_mut(c_argv_bytes.as_ptr() as *mut NonNull<u8>, args.len())
+        };
+
+        for (i, arg) in argv_slice.iter().enumerate() {
+            c_argv_slice[i] = arg.as_non_null();
+        }
+
+        (args.len() as i32, c_argv_slice.as_ptr())
     }
 
-    let result = main(args.len() as i32, c_argv_slice.as_ptr());
+    let (argc, argv) = c_main_args(args);
+    let result = main(argc, argv);
     syscalls::exit(result as usize)
 }

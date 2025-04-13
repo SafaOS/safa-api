@@ -366,6 +366,8 @@ extern "C" fn syspspawn(
     path_len: usize,
     argv_ptr: OptionalPtrMut<RawSlice<u8>>,
     argv_len: usize,
+    env_ptr: OptionalPtrMut<RawSlice<u8>>,
+    env_len: usize,
     flags: SpawnFlags,
     dest_pid: OptionalPtrMut<Pid>,
     stdin: Optional<Ri>,
@@ -396,6 +398,7 @@ extern "C" fn syspspawn(
         version: 1,
         name: unsafe { RawSlice::from_raw_parts(name_ptr, name_len) },
         argv: unsafe { RawSliceMut::from_raw_parts(argv_ptr, argv_len) },
+        env: unsafe { RawSliceMut::from_raw_parts(env_ptr, env_len) },
         flags,
         metadata: meta_ptr,
     };
@@ -412,13 +415,14 @@ extern "C" fn syspspawn(
 /// # Arguments
 /// * `stdin`, `stdout`, `stderr` are the file descriptors of stdio, if None, they will be inherited from the parent
 /// # Safety
-/// `argv` must be a valid pointer to a slice of slices of `&str`
-/// `argv` will become invaild after use, using it is UB
+/// `argv` and `env` must be valid pointers to a slice of slices of `&str` and `&[u8]` respectively
+/// `argv` and `env` will become invalid after use, using them is UB
 #[inline]
 pub unsafe fn unsafe_pspawn(
     name: Option<&str>,
     path: &str,
     argv: *mut [&str],
+    env: *mut [&[u8]],
     flags: SpawnFlags,
     stdin: Option<Ri>,
     stdout: Option<Ri>,
@@ -430,8 +434,10 @@ pub unsafe fn unsafe_pspawn(
     let name_ptr = name.map(|s| s.as_ptr()).unwrap_or(ptr::null());
     let name_len = name.map(|s| s.len()).unwrap_or(0);
 
-    let argv: *mut [&[u8]] = argv as *mut [&[u8]];
+    let argv = argv as *mut [&[u8]];
     let argv = unsafe { RawSliceMut::from_slices(argv) };
+    let env = unsafe { RawSliceMut::from_slices(env) };
+
     err_from_u16!(
         syspspawn(
             name_ptr,
@@ -440,6 +446,8 @@ pub unsafe fn unsafe_pspawn(
             path.len(),
             argv.as_mut_ptr(),
             argv.len(),
+            env.as_mut_ptr(),
+            env.len(),
             flags,
             &mut pid,
             stdin.into(),
@@ -450,17 +458,36 @@ pub unsafe fn unsafe_pspawn(
     )
 }
 
-/// same as [`unsafe_pspawn`] but safe because it makes it clear that `argv` is consumed`
+// FIXME: I convert the argv form &[u8] to RawSlice
+// and that is why it is consumed,
+// i reuse the argv buffer as the result of the conversion
+// even though this might be unefficient especially that RawSlice should have the same layout as &[u8] and same for env
+// altough this is fine because this method is only used in the rust standard library which gives args as an owned Vec anyways
+//
+/// same as [`unsafe_pspawn`] but safe because it makes it clear that `argv` and `env` are consumed
 #[inline]
 pub fn pspawn(
     name: Option<&str>,
     path: &str,
     mut argv: Vec<&str>,
+    mut env: Vec<&[u8]>,
     flags: SpawnFlags,
     stdin: Option<Ri>,
     stdout: Option<Ri>,
     stderr: Option<Ri>,
 ) -> Result<Pid, ErrorStatus> {
     let argv: &mut [&str] = &mut argv;
-    unsafe { unsafe_pspawn(name, path, argv as *mut _, flags, stdin, stdout, stderr) }
+    let env: &mut [&[u8]] = &mut env;
+    unsafe {
+        unsafe_pspawn(
+            name,
+            path,
+            argv as *mut _,
+            env as *mut _,
+            flags,
+            stdin,
+            stdout,
+            stderr,
+        )
+    }
 }

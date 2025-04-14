@@ -1,6 +1,7 @@
 //! Module for process-related high-level functions over process related syscalls
 //!
 //! Such as api initialization functions [`_c_api_init`] and [`sysapi_init`], environment variables, and process arguments
+// FIXME: refactor this mess of a module and make it not available when feature = "std" because it breaks things
 
 use core::{cell::UnsafeCell, ffi::CStr, mem::MaybeUninit, ptr::NonNull};
 
@@ -41,10 +42,6 @@ impl RawArgs {
 
     unsafe fn into_slice(self) -> &'static [NonNullSlice<u8>] {
         unsafe { self.args.as_ref() }
-    }
-
-    unsafe fn into_mut_slice(mut self) -> &'static mut [NonNullSlice<u8>] {
-        unsafe { self.args.as_mut() }
     }
 }
 
@@ -208,6 +205,24 @@ impl EnvVars {
         self.env.clear();
         self.size_hint = 0;
     }
+
+    fn duplicate(&self) -> (Vec<u8>, Vec<RawSlice<u8>>) {
+        let mut buf: Vec<u8> = Vec::with_capacity(self.size_hint);
+        let mut slices = Vec::with_capacity(self.env.len());
+
+        for (key, value) in &self.env {
+            let ptr = unsafe { buf.as_mut_ptr().add(buf.len()) };
+            slices.push(unsafe {
+                RawSlice::from_raw_parts(ptr, key.len() + 1 + value.count_bytes())
+            });
+
+            buf.extend_from_slice(key);
+            buf.push(b'=');
+            buf.extend_from_slice(value.to_bytes_with_nul());
+        }
+
+        (buf, slices)
+    }
 }
 
 // TODO: refactor all of this
@@ -219,6 +234,14 @@ static ENV: Lazy<UnsafeCell<EnvVars>> = Lazy::new(|| {
     unsafe { env.insert_raw(RAW_ENV.as_slice()) };
     UnsafeCell::new(env)
 });
+
+// FIXME: unsafe after adding threads
+/// Gets all the environment variables in the current process
+#[inline]
+pub fn env_get_all() -> &'static [(Box<[u8]>, Box<CStr>)] {
+    let env = unsafe { &*ENV.get() };
+    &env.env
+}
 
 #[inline]
 pub fn env_get(key: &[u8]) -> Option<&[u8]> {
@@ -236,6 +259,17 @@ pub fn env_set(key: &[u8], value: &[u8]) {
 pub fn env_remove(key: &[u8]) {
     let env = unsafe { &mut *ENV.get() };
     env.remove(key);
+}
+
+/// Duplicate the environment variables so that they can be used in a child process by being passed to `_start`.
+///
+/// # Safety
+/// unsafe because it requires for the output to not be dropped before the child process is created.
+/// the first element in the tuple respresents the raw environment variables, while the second element is a vector of pointers within the first element.
+#[inline]
+pub(crate) unsafe fn duplicate_env() -> (Vec<u8>, Vec<RawSlice<u8>>) {
+    let env = unsafe { &*ENV.get() };
+    env.duplicate()
 }
 
 #[inline]
@@ -315,6 +349,10 @@ impl ArgsIter {
         Self { args, index: 0 }
     }
 
+    pub fn get_index(&self, index: usize) -> Option<NonNullSlice<u8>> {
+        self.args.get(index).copied()
+    }
+
     pub fn next(&mut self) -> Option<NonNullSlice<u8>> {
         if self.index < self.args.len() {
             let arg = self.args[self.index];
@@ -324,9 +362,13 @@ impl ArgsIter {
             None
         }
     }
-
-    pub fn len(&self) -> usize {
+    /// The total amount of args in the iterator before calling [`Self::next`]
+    pub fn total_len(&self) -> usize {
         self.args.len()
+    }
+    /// The amount of remaining args in the iterator
+    pub fn len(&self) -> usize {
+        self.total_len() - self.index
     }
 }
 

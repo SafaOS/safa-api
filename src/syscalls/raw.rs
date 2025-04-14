@@ -415,14 +415,13 @@ extern "C" fn syspspawn(
 /// # Arguments
 /// * `stdin`, `stdout`, `stderr` are the file descriptors of stdio, if None, they will be inherited from the parent
 /// # Safety
-/// `argv` and `env` must be valid pointers to a slice of slices of `&str` and `&[u8]` respectively
-/// `argv` and `env` will become invalid after use, using them is UB
+/// `argv` must be valid pointers to a slice of slices of `&str`
+/// `argv` will become invalid after use, using them is UB
 #[inline]
 pub unsafe fn unsafe_pspawn(
     name: Option<&str>,
     path: &str,
     argv: *mut [&str],
-    env: *mut [&[u8]],
     flags: SpawnFlags,
     stdin: Option<Ri>,
     stdout: Option<Ri>,
@@ -436,7 +435,7 @@ pub unsafe fn unsafe_pspawn(
 
     let argv = argv as *mut [&[u8]];
     let argv = unsafe { RawSliceMut::from_slices(argv) };
-    let env = unsafe { RawSliceMut::from_slices(env) };
+    let (_, mut env) = crate::process::duplicate_env();
 
     err_from_u16!(
         syspspawn(
@@ -464,30 +463,17 @@ pub unsafe fn unsafe_pspawn(
 // even though this might be unefficient especially that RawSlice should have the same layout as &[u8] and same for env
 // altough this is fine because this method is only used in the rust standard library which gives args as an owned Vec anyways
 //
-/// same as [`unsafe_pspawn`] but safe because it makes it clear that `argv` and `env` are consumed
+/// same as [`unsafe_pspawn`] but safe because it makes it clear that `argv`  are consumed
 #[inline]
 pub fn pspawn(
     name: Option<&str>,
     path: &str,
     mut argv: Vec<&str>,
-    mut env: Vec<&[u8]>,
     flags: SpawnFlags,
     stdin: Option<Ri>,
     stdout: Option<Ri>,
     stderr: Option<Ri>,
 ) -> Result<Pid, ErrorStatus> {
     let argv: &mut [&str] = &mut argv;
-    let env: &mut [&[u8]] = &mut env;
-    unsafe {
-        unsafe_pspawn(
-            name,
-            path,
-            argv as *mut _,
-            env as *mut _,
-            flags,
-            stdin,
-            stdout,
-            stderr,
-        )
-    }
+    unsafe { unsafe_pspawn(name, path, argv as *mut _, flags, stdin, stdout, stderr) }
 }

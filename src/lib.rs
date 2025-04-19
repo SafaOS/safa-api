@@ -9,7 +9,7 @@
 
 use core::{cell::LazyCell, fmt::Write, ops::Deref};
 
-use process::sysmeta_stderr;
+use process::stdio::sysmeta_stderr;
 
 pub mod errors {
     pub use safa_abi::errors::{ErrorStatus, SysResult};

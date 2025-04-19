@@ -11,7 +11,7 @@ use super::types::{
 use super::SyscallNum;
 use super::{define_syscall, DirEntry, FileAttr, RawSlice, RawSliceMut};
 use super::{err_from_u16, ErrorStatus};
-use crate::process::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout};
+use crate::process::stdio::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout};
 use alloc::vec::Vec;
 use core::ptr;
 use safa_abi::raw::processes::SpawnFlags;
@@ -177,7 +177,7 @@ define_syscall! {
         syssync(ri: Ri)
     },
     SyscallNum::SysDup => {
-        /// Duplicates the resource refered to by the resource id `ri` and puts the new resource id in `dest_ri`
+        /// Duplicates the resource referred to by the resource id `ri` and puts the new resource id in `dest_ri`
         sysdup(ri: Ri, dest_ri: RequiredPtrMut<Ri>)
     }
 }
@@ -230,7 +230,7 @@ pub fn sync(ri: Ri) -> Result<(), ErrorStatus> {
 }
 
 #[inline]
-/// Duplicates the resource refered to by the resource id `ri`
+/// Duplicates the resource referred to by the resource id `ri`
 /// and returns the new resource id
 pub fn dup(ri: Ri) -> Result<Ri, ErrorStatus> {
     let mut dest_ri = 0xAAAAAAAAAAAAAAAAusize;
@@ -309,7 +309,7 @@ pub fn chdir(path: &str) -> Result<(), ErrorStatus> {
 
 use alloc::string::String;
 #[inline]
-/// Retrives the current work dir
+/// Retrieves the current work dir
 pub fn getcwd() -> Result<String, ErrorStatus> {
     let mut buffer = Vec::with_capacity(safa_abi::consts::MAX_PATH_LENGTH);
     unsafe {
@@ -435,7 +435,7 @@ pub unsafe fn unsafe_pspawn(
 
     let argv = argv as *mut [&[u8]];
     let argv = unsafe { RawSliceMut::from_slices(argv) };
-    let (_, mut env) = crate::process::duplicate_env();
+    let (_, mut env) = crate::process::env::duplicate_env();
 
     err_from_u16!(
         syspspawn(
@@ -460,8 +460,8 @@ pub unsafe fn unsafe_pspawn(
 // FIXME: I convert the argv form &[u8] to RawSlice
 // and that is why it is consumed,
 // i reuse the argv buffer as the result of the conversion
-// even though this might be unefficient especially that RawSlice should have the same layout as &[u8] and same for env
-// altough this is fine because this method is only used in the rust standard library which gives args as an owned Vec anyways
+// even though this might be inefficient especially that RawSlice should have the same layout as &[u8] and same for env
+// although this is fine because this method is only used in the rust standard library which gives args as an owned Vec anyways
 //
 /// same as [`unsafe_pspawn`] but safe because it makes it clear that `argv`  are consumed
 #[inline]

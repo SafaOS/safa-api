@@ -5,11 +5,12 @@ use crate::{
     alloc::GLOBAL_SYSTEM_ALLOCATOR,
     syscalls::{self},
 };
-use safa_abi::raw::{NonNullSlice, RawSliceMut};
+use safa_abi::raw::{processes::AbiStructures, NonNullSlice, RawSliceMut};
 
 use super::{
     args::{RawArgs, RAW_ARGS},
     env::RAW_ENV,
+    stdio::init_meta,
 };
 
 // Initialization
@@ -44,9 +45,11 @@ fn init_env(env: RawSliceMut<NonNullSlice<u8>>) {
 pub extern "C" fn sysapi_init(
     args: RawSliceMut<NonNullSlice<u8>>,
     env: RawSliceMut<NonNullSlice<u8>>,
+    task_abi_structures: AbiStructures,
 ) {
     init_args(args);
     init_env(env);
+    init_meta(task_abi_structures);
 }
 
 /// Initializes the safa-api, converts arguments to C-style arguments, calls `main`, and exits with the result
@@ -61,9 +64,10 @@ pub extern "C" fn sysapi_init(
 pub unsafe extern "C" fn _c_api_init(
     args: RawSliceMut<NonNullSlice<u8>>,
     env: RawSliceMut<NonNullSlice<u8>>,
-    main: extern "C" fn(argc: i32, argv: *const *const u8) -> i32,
+    task_abi_structures: *const AbiStructures,
+    main: extern "C" fn(argc: i32, argv: *const NonNull<u8>) -> i32,
 ) -> ! {
-    sysapi_init(args, env);
+    sysapi_init(args, env, *task_abi_structures);
 
     // Convert SafaOS `_start` arguments to `main` arguments
     fn c_main_args(args: RawSliceMut<NonNullSlice<u8>>) -> (i32, *const *const u8) {

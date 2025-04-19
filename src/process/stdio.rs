@@ -91,6 +91,6 @@ pub extern "C" fn sysmeta_stdin() -> usize {
     **STDIN
 }
 
-pub fn meta_init(abi_structures: AbiStructures) {
+pub fn init_meta(abi_structures: AbiStructures) {
     unsafe { ABI_STRUCTURES.init(abi_structures) };
 }

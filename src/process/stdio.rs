@@ -1,17 +1,35 @@
 //! contains functions related to standard input/output/error streams descriptors
 //! api must be initialized before using these functions, see [`super::init`]
 
-use crate::syscalls::{self, define_syscall};
-use safa_abi::{errors::ErrorStatus, raw::processes::TaskMetadata};
+use core::{cell::UnsafeCell, mem::MaybeUninit};
 
-use crate::{syscalls::err_from_u16, syscalls::SyscallNum, Lazy};
-static META: Lazy<TaskMetadata> =
-    Lazy::new(|| meta_take().expect("failed to take ownership of the task metadata"));
+use crate::syscalls::{self};
+use safa_abi::raw::processes::{AbiStructures, TaskStdio};
 
-// PEAK design
+use crate::Lazy;
 
+pub(super) struct StaticAbiStructures(UnsafeCell<MaybeUninit<AbiStructures>>);
+
+impl StaticAbiStructures {
+    pub unsafe fn init(&self, structures: AbiStructures) {
+        let ptr = self.0.get();
+        ptr.write(MaybeUninit::new(structures));
+    }
+
+    unsafe fn get(&'static self) -> &'static AbiStructures {
+        let ptr = self.0.get();
+        MaybeUninit::assume_init_ref(&*ptr)
+    }
+}
+
+unsafe impl Sync for StaticAbiStructures {}
+
+pub(super) static ABI_STRUCTURES: StaticAbiStructures =
+    StaticAbiStructures(UnsafeCell::new(MaybeUninit::uninit()));
+
+static STDIO: Lazy<TaskStdio> = Lazy::new(|| unsafe { ABI_STRUCTURES.get().stdio });
 static STDIN: Lazy<usize> = Lazy::new(|| {
-    let stdin: Option<usize> = META.stdin.into();
+    let stdin: Option<usize> = STDIO.stdin.into();
     if let Some(stdin) = stdin {
         stdin
     } else {
@@ -20,7 +38,7 @@ static STDIN: Lazy<usize> = Lazy::new(|| {
 });
 
 static STDOUT: Lazy<usize> = Lazy::new(|| {
-    let stdout: Option<usize> = META.stdout.into();
+    let stdout: Option<usize> = STDIO.stdout.into();
     if let Some(stdout) = stdout {
         stdout
     } else {
@@ -28,9 +46,8 @@ static STDOUT: Lazy<usize> = Lazy::new(|| {
     }
 });
 
-use syscalls::types::SyscallResult;
 static STDERR: Lazy<usize> = Lazy::new(|| {
-    let stderr: Option<usize> = META.stderr.into();
+    let stderr: Option<usize> = STDIO.stderr.into();
     if let Some(stderr) = stderr {
         stderr
     } else {
@@ -38,20 +55,9 @@ static STDERR: Lazy<usize> = Lazy::new(|| {
     }
 });
 
-define_syscall!(SyscallNum::SysMetaTake => {
-    /// Takes ownership of the task metadata
-    /// the task metadata is used to store the stdin, stdout, and stderr file descriptors
-    /// this syscall can only be called once otherwise it will return [`ErrorStatus::Generic`] (1)
-    sysmeta_take(dest_task: *mut TaskMetadata)
-});
-
-#[inline]
-pub fn meta_take() -> Result<TaskMetadata, ErrorStatus> {
-    let mut dest_meta: TaskMetadata = unsafe { core::mem::zeroed() };
-    err_from_u16!(sysmeta_take(&raw mut dest_meta), dest_meta)
-}
-
 /// Returns the resource id of the stdout file descriptor
+///
+/// if there is no stdout file descriptor, it will fall back to `dev:/tty`
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
@@ -62,6 +68,8 @@ pub extern "C" fn sysmeta_stdout() -> usize {
 }
 
 /// Returns the resource id of the stderr file descriptor
+///
+/// if there is no stderr file descriptor, it will fall back to `dev:/tty`
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
@@ -72,6 +80,8 @@ pub extern "C" fn sysmeta_stderr() -> usize {
 }
 
 /// Returns the resource id of the stdin file descriptor
+///
+/// if there is no stdin file descriptor, it will fall back to `dev:/tty`
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
@@ -79,4 +89,8 @@ pub extern "C" fn sysmeta_stderr() -> usize {
 #[inline(always)]
 pub extern "C" fn sysmeta_stdin() -> usize {
     **STDIN
+}
+
+pub fn meta_init(abi_structures: AbiStructures) {
+    unsafe { ABI_STRUCTURES.init(abi_structures) };
 }

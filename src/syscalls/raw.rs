@@ -14,7 +14,7 @@ use super::{err_from_u16, ErrorStatus};
 use crate::process::stdio::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout};
 use alloc::vec::Vec;
 use core::ptr;
-use safa_abi::raw::processes::SpawnFlags;
+use safa_abi::raw::processes::{SpawnFlags, TaskStdio};
 use safa_abi::raw::Optional;
 
 define_syscall!(SyscallNum::SysGetDirEntry => {
@@ -375,11 +375,10 @@ extern "C" fn syspspawn(
     stderr: Optional<Ri>,
 ) -> SyscallResult {
     use safa_abi::raw::processes::SpawnConfig;
-    use safa_abi::raw::processes::TaskMetadata;
     let (mut stdin, mut stdout, mut stderr): (Option<_>, Option<_>, Option<_>) =
         (stdin.into(), stdout.into(), stderr.into());
 
-    let metadata = {
+    let stdio = {
         if stdin.is_none() && stdout.is_none() && stderr.is_none() {
             None
         } else {
@@ -387,12 +386,12 @@ extern "C" fn syspspawn(
             stdin.get_or_insert_with(|| sysmeta_stdin());
             stderr.get_or_insert_with(|| sysmeta_stderr());
 
-            Some(TaskMetadata::new(stdout, stdin, stderr))
+            Some(TaskStdio::new(stdout, stdin, stderr))
         }
     };
 
-    let metadata = metadata.as_ref();
-    let meta_ptr = metadata.map(|m| m as *const _).unwrap_or(core::ptr::null());
+    let stdio = stdio.as_ref();
+    let stdio_ptr = stdio.map(|m| m as *const _).unwrap_or(core::ptr::null());
 
     let config = SpawnConfig {
         version: 1,
@@ -400,7 +399,7 @@ extern "C" fn syspspawn(
         argv: unsafe { RawSliceMut::from_raw_parts(argv_ptr, argv_len) },
         env: unsafe { RawSliceMut::from_raw_parts(env_ptr, env_len) },
         flags,
-        metadata: meta_ptr,
+        stdio: stdio_ptr,
     };
     syscall!(
         SyscallNum::SysPSpawn,

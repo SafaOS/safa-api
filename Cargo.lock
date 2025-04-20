@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "safa-api"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",

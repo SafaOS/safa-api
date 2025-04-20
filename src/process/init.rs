@@ -65,7 +65,7 @@ pub unsafe extern "C" fn _c_api_init(
     args: RawSliceMut<NonNullSlice<u8>>,
     env: RawSliceMut<NonNullSlice<u8>>,
     task_abi_structures: *const AbiStructures,
-    main: extern "C" fn(argc: i32, argv: *const NonNull<u8>) -> i32,
+    main: extern "C" fn(argc: i32, argv: *const *const u8) -> i32,
 ) -> ! {
     sysapi_init(args, env, *task_abi_structures);
 

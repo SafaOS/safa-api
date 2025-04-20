@@ -25,7 +25,7 @@ impl StaticAbiStructures {
 unsafe impl Sync for StaticAbiStructures {}
 
 pub(super) static ABI_STRUCTURES: StaticAbiStructures =
-    StaticAbiStructures(UnsafeCell::new(MaybeUninit::uninit()));
+    StaticAbiStructures(UnsafeCell::new(MaybeUninit::zeroed()));
 
 static STDIO: Lazy<TaskStdio> = Lazy::new(|| unsafe { ABI_STRUCTURES.get().stdio });
 static STDIN: Lazy<usize> = Lazy::new(|| {

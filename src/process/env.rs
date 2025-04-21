@@ -55,7 +55,8 @@ impl EnvVars {
         self.env
             .push((key.to_vec().into_boxed_slice(), cstr.into_boxed_c_str()));
 
-        self.size_hint += key.len() + value.len() + 1;
+        // + null + '='
+        self.size_hint += key.len() + value.len() + 2;
     }
 
     #[inline(always)]
@@ -67,8 +68,9 @@ impl EnvVars {
                 let new_value = CString::new(value)
                     .unwrap_or_else(|_| CStr::from_bytes_until_nul(value).unwrap().into());
                 *v = new_value.into_boxed_c_str();
-                self.size_hint -= old_len;
-                self.size_hint += value.len();
+                self.size_hint -= old_len + 1;
+                // + null
+                self.size_hint += value.len() + 1;
                 return;
             }
         }
@@ -116,19 +118,31 @@ impl EnvVars {
         self.size_hint = 0;
     }
 
-    fn duplicate(&self) -> (Vec<u8>, Vec<RawSlice<u8>>) {
+    fn duplicate(&self) -> (Box<[u8]>, Vec<RawSlice<u8>>) {
+        // buf must not reallocate so size_hint must be accurate
+        // TODO: maybe rename `size_hint`?
         let mut buf: Vec<u8> = Vec::with_capacity(self.size_hint);
+        unsafe { buf.set_len(buf.capacity()) };
+        let mut buf = buf.into_boxed_slice();
+        let mut offset = 0;
+
         let mut slices = Vec::with_capacity(self.env.len());
 
         for (key, value) in &self.env {
-            let ptr = unsafe { buf.as_mut_ptr().add(buf.len()) };
+            let ptr = unsafe { buf.as_mut_ptr().add(offset) };
             slices.push(unsafe {
                 RawSlice::from_raw_parts(ptr, key.len() + 1 + value.count_bytes())
             });
 
-            buf.extend_from_slice(key);
-            buf.push(b'=');
-            buf.extend_from_slice(value.to_bytes_with_nul());
+            buf[offset..offset + key.len()].copy_from_slice(key);
+            offset += key.len();
+
+            buf[offset] = b'=';
+            offset += 1;
+
+            let value_len = value.count_bytes() + 1;
+            buf[offset..offset + value_len].copy_from_slice(value.to_bytes_with_nul());
+            offset += value_len;
         }
 
         (buf, slices)
@@ -177,7 +191,7 @@ pub fn env_remove(key: &[u8]) {
 /// unsafe because it requires for the output to not be dropped before the child process is created.
 /// the first element in the tuple represents the raw environment variables, while the second element is a vector of pointers within the first element.
 #[inline]
-pub(crate) unsafe fn duplicate_env() -> (Vec<u8>, Vec<RawSlice<u8>>) {
+pub(crate) unsafe fn duplicate_env() -> (Box<[u8]>, Vec<RawSlice<u8>>) {
     let env = unsafe { &*ENV.get() };
     env.duplicate()
 }

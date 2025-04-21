@@ -366,8 +366,6 @@ extern "C" fn syspspawn(
     path_len: usize,
     argv_ptr: OptionalPtrMut<RawSlice<u8>>,
     argv_len: usize,
-    env_ptr: OptionalPtrMut<RawSlice<u8>>,
-    env_len: usize,
     flags: SpawnFlags,
     dest_pid: OptionalPtrMut<Pid>,
     stdin: Optional<Ri>,
@@ -392,15 +390,17 @@ extern "C" fn syspspawn(
 
     let stdio = stdio.as_ref();
     let stdio_ptr = stdio.map(|m| m as *const _).unwrap_or(core::ptr::null());
+    let (_, mut env) = unsafe { crate::process::env::duplicate_env() };
 
     let config = SpawnConfig {
         version: 1,
         name: unsafe { RawSlice::from_raw_parts(name_ptr, name_len) },
         argv: unsafe { RawSliceMut::from_raw_parts(argv_ptr, argv_len) },
-        env: unsafe { RawSliceMut::from_raw_parts(env_ptr, env_len) },
+        env: unsafe { RawSliceMut::from_raw_parts(env.as_mut_ptr(), env.len()) },
         flags,
         stdio: stdio_ptr,
     };
+
     syscall!(
         SyscallNum::SysPSpawn,
         path_ptr as usize,
@@ -434,7 +434,6 @@ pub unsafe fn unsafe_pspawn(
 
     let argv = argv as *mut [&[u8]];
     let argv = unsafe { RawSliceMut::from_slices(argv) };
-    let (_, mut env) = crate::process::env::duplicate_env();
 
     err_from_u16!(
         syspspawn(
@@ -444,8 +443,6 @@ pub unsafe fn unsafe_pspawn(
             path.len(),
             argv.as_mut_ptr(),
             argv.len(),
-            env.as_mut_ptr(),
-            env.len(),
             flags,
             &mut pid,
             stdin.into(),

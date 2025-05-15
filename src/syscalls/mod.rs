@@ -24,12 +24,13 @@ pub(crate) use err_from_u16;
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall0(num: SyscallNum) -> SyscallResult {
+pub fn syscall0<const NUM: u16>() -> SyscallResult {
     let result: u16;
     unsafe {
+        #[cfg(target_arch = "x86_64")]
         asm!(
             "int 0x80",
-            in("rax") num as usize,
+            in("rax") NUM as usize,
             lateout("rax") result,
         );
         core::mem::transmute(result)
@@ -38,12 +39,13 @@ pub fn syscall0(num: SyscallNum) -> SyscallResult {
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall1(num: SyscallNum, arg1: usize) -> SyscallResult {
+pub fn syscall1<const NUM: u16>(arg1: usize) -> SyscallResult {
     let result: u16;
     unsafe {
+        #[cfg(target_arch = "x86_64")]
         asm!(
             "int 0x80",
-            in("rax") num as usize,
+            in("rax") NUM as usize,
             in("rdi") arg1,
             lateout("rax") result,
         );
@@ -53,12 +55,13 @@ pub fn syscall1(num: SyscallNum, arg1: usize) -> SyscallResult {
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> SyscallResult {
+pub fn syscall2<const NUM: u16>(arg1: usize, arg2: usize) -> SyscallResult {
     let result: u16;
     unsafe {
+        #[cfg(target_arch = "x86_64")]
         asm!(
             "int 0x80",
-            in("rax") num as usize,
+            in("rax") NUM as usize,
             in("rdi") arg1,
             in("rsi") arg2,
             lateout("rax") result,
@@ -69,12 +72,13 @@ pub fn syscall2(num: SyscallNum, arg1: usize, arg2: usize) -> SyscallResult {
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> SyscallResult {
+pub fn syscall3<const NUM: u16>(arg1: usize, arg2: usize, arg3: usize) -> SyscallResult {
     let result: u16;
     unsafe {
+        #[cfg(target_arch = "x86_64")]
         asm!(
             "int 0x80",
-            in("rax") num as usize,
+            in("rax") NUM as usize,
             in("rdi") arg1,
             in("rsi") arg2,
             in("rdx") arg3,
@@ -86,8 +90,7 @@ pub fn syscall3(num: SyscallNum, arg1: usize, arg2: usize, arg3: usize) -> Sysca
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall5(
-    num: SyscallNum,
+pub fn syscall5<const NUM: u16>(
     arg1: usize,
     arg2: usize,
     arg3: usize,
@@ -96,9 +99,10 @@ pub fn syscall5(
 ) -> SyscallResult {
     let result: u16;
     unsafe {
+        #[cfg(target_arch = "x86_64")]
         asm!(
             "int 0x80",
-            in("rax") num as usize,
+            in("rax") NUM as usize,
             in("rdi") arg1,
             in("rsi") arg2,
             in("rdx") arg3,
@@ -112,8 +116,7 @@ pub fn syscall5(
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall4(
-    num: SyscallNum,
+pub fn syscall4<const NUM: u16>(
     arg1: usize,
     arg2: usize,
     arg3: usize,
@@ -121,9 +124,10 @@ pub fn syscall4(
 ) -> SyscallResult {
     let result: u16;
     unsafe {
+        #[cfg(target_arch = "x86_64")]
         asm!(
             "int 0x80",
-            in("rax") num as usize,
+            in("rax") NUM as usize,
             in("rdi") arg1,
             in("rsi") arg2,
             in("rdx") arg3,
@@ -140,22 +144,22 @@ pub fn syscall4(
 /// returns a [`SyscallResult`]
 macro_rules! syscall {
     ($num: path $(,)?) => {
-        $crate::syscalls::syscall0($num)
+        $crate::syscalls::syscall0::<{ $num as u16 }>()
     };
     ($num: path, $arg1: expr $(,)?) => {
-        $crate::syscalls::syscall1($num, $arg1)
+        $crate::syscalls::syscall1::<{ $num as u16 }>($arg1)
     };
     ($num: path, $arg1: expr, $arg2: expr $(,)?) => {
-        $crate::syscalls::syscall2($num, $arg1, $arg2)
+        $crate::syscalls::syscall2::<{ $num as u16 }>($arg1, $arg2)
     };
     ($num: path, $arg1: expr, $arg2: expr, $arg3: expr $(,)?) => {
-        $crate::syscalls::syscall3($num, $arg1, $arg2, $arg3)
+        $crate::syscalls::syscall3::<{ $num as u16 }>($arg1, $arg2, $arg3)
     };
     ($num: path, $arg1: expr, $arg2: expr, $arg3: expr, $arg4: expr $(,)?) => {
-        $crate::syscalls::syscall4($num, $arg1, $arg2, $arg3, $arg4)
+        $crate::syscalls::syscall4::<{ $num as u16 }>($arg1, $arg2, $arg3, $arg4)
     };
     ($num: path, $arg1: expr, $arg2: expr, $arg3: expr, $arg4: expr, $arg5: expr $(,)?) => {
-        $crate::syscalls::syscall5($num, $arg1, $arg2, $arg3, $arg4, $arg5)
+        $crate::syscalls::syscall5::<{ $num as u16 }>($arg1, $arg2, $arg3, $arg4, $arg5)
     };
 }
 

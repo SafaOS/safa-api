@@ -45,46 +45,46 @@ use super::ErrorStatus;
 
 /// A nullable muttable pointer to `T`
 ///
-/// garuanteed to be accepted by the syscall if it is null,
-/// however the syscall will return [`ErrorStatus::InvaildPtr`] if it is not aligned to `align_of::<T>()`
+/// guaranteed to be accepted by the syscall if it is null,
+/// however the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()`
 ///
 /// this is typically for the syscall to return optional values
 pub type OptionalPtrMut<T> = *mut T;
 
 /// A nullable imuttable pointer to `T`
 ///
-/// garuanteed to be accepted by the syscall if it is null,
-/// however the syscall will return [`ErrorStatus::InvaildPtr`] if it is not aligned to `align_of::<T>()`
+/// guaranteed to be accepted by the syscall if it is null,
+/// however the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()`
 ///
 /// this is typically for the syscall to return optional values
 pub type OptionalPtr<T> = *const T;
 
 /// A muttable pointer to `T`
 ///
-/// the syscall will return [`ErrorStatus::InvaildPtr`] if it is not aligned to `align_of::<T>()` or if it is null
+/// the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()` or if it is null
 ///
 /// typically used for the syscall to return a value
 pub type RequiredPtrMut<T> = *mut T;
 
 /// An immuttable pointer to `T`
 ///
-/// the syscall will return [`ErrorStatus::InvaildPtr`] if it is not aligned to `align_of::<T>()` or if it is null
+/// the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()` or if it is null
 ///
 /// typically used for the syscall to return a value
 pub type RequiredPtr<T> = *const T;
 
 /// An immuttable pointer to a byte array
 ///
-/// the syscall will return [`ErrorStatus::InvaildPtr`] if it is null
+/// the syscall will return [`ErrorStatus::InvalidPtr`] if it is null
 ///
-/// the syscall will return [`ErrorStatus::InvaildStr`] if it is not valid utf-8
+/// the syscall will return [`ErrorStatus::InvalidStr`] if it is not valid utf-8
 ///
 /// typically followed by a `len` parameter to specify the length of the string
 pub type StrPtr = RequiredPtr<u8>;
 
 /// A muttable pointer to a byte array
 ///
-/// the syscall will return [`ErrorStatus::InvaildPtr`] if it is null
+/// the syscall will return [`ErrorStatus::InvalidPtr`] if it is null
 ///
 /// typically used for the syscall to return a string meaning that after the syscall is successful it should contain a valid utf-8 string
 ///
@@ -93,7 +93,7 @@ pub type StrPtrMut = RequiredPtrMut<u8>;
 
 /// An optional immuttable nullable pointer to a byte array
 ///
-/// the syscall will return [`ErrorStatus::InvaildStr`] if it is not null and is not valid utf-8
+/// the syscall will return [`ErrorStatus::InvalidStr`] if it is not null and is not valid utf-8
 ///
 /// typically followed by a `len` parameter to specify the length of the string
 ///
@@ -102,7 +102,7 @@ pub type OptionalStrPtr = OptionalPtr<u8>;
 
 /// An opaque type that represents a syscall result
 /// the underlying type is a 16 bit unsigned integer, in which 0 is success and any other value is in error
-/// respresented by the [`ErrorStatus`] enum
+/// represented by the [`ErrorStatus`] enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct SyscallResult(u16);

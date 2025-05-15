@@ -33,6 +33,12 @@ pub fn syscall0<const NUM: u16>() -> SyscallResult {
             in("rax") NUM as usize,
             lateout("rax") result,
         );
+        #[cfg(target_arch = "aarch64")]
+        asm!(
+            "svc #{num}",
+            num = const NUM,
+            lateout("x0") result
+        );
         core::mem::transmute(result)
     }
 }
@@ -48,6 +54,13 @@ pub fn syscall1<const NUM: u16>(arg1: usize) -> SyscallResult {
             in("rax") NUM as usize,
             in("rdi") arg1,
             lateout("rax") result,
+        );
+        #[cfg(target_arch = "aarch64")]
+        asm!(
+            "svc #{num}",
+            num = const NUM,
+            in("x0") arg1,
+            lateout("x0") result
         );
         core::mem::transmute(result)
     }
@@ -66,6 +79,14 @@ pub fn syscall2<const NUM: u16>(arg1: usize, arg2: usize) -> SyscallResult {
             in("rsi") arg2,
             lateout("rax") result,
         );
+        #[cfg(target_arch = "aarch64")]
+        asm!(
+            "svc #{num}",
+            num = const NUM,
+            in("x0") arg1,
+            in("x1") arg2,
+            lateout("x0") result
+        );
         core::mem::transmute(result)
     }
 }
@@ -83,6 +104,50 @@ pub fn syscall3<const NUM: u16>(arg1: usize, arg2: usize, arg3: usize) -> Syscal
             in("rsi") arg2,
             in("rdx") arg3,
             lateout("rax") result,
+        );
+        #[cfg(target_arch = "aarch64")]
+        asm!(
+            "svc #{num}",
+            num = const NUM,
+            in("x0") arg1,
+            in("x1") arg2,
+            in("x2") arg3,
+            lateout("x0") result
+        );
+        core::mem::transmute(result)
+    }
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn syscall4<const NUM: u16>(
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+) -> SyscallResult {
+    let result: u16;
+    unsafe {
+        #[cfg(target_arch = "x86_64")]
+        asm!(
+            "int 0x80",
+            in("rax") NUM as usize,
+            in("rdi") arg1,
+            in("rsi") arg2,
+            in("rdx") arg3,
+            in("rcx") arg4,
+            lateout("rax") result,
+        );
+
+        #[cfg(target_arch = "aarch64")]
+        asm!(
+            "svc #{num}",
+            num = const NUM,
+            in("x0") arg1,
+            in("x1") arg2,
+            in("x2") arg3,
+            in("x3") arg4,
+            lateout("x0") result
         );
         core::mem::transmute(result)
     }
@@ -110,29 +175,16 @@ pub fn syscall5<const NUM: u16>(
             in("r8") arg5,
             lateout("rax") result,
         );
-        core::mem::transmute(result)
-    }
-}
-
-#[doc(hidden)]
-#[inline(always)]
-pub fn syscall4<const NUM: u16>(
-    arg1: usize,
-    arg2: usize,
-    arg3: usize,
-    arg4: usize,
-) -> SyscallResult {
-    let result: u16;
-    unsafe {
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(target_arch = "aarch64")]
         asm!(
-            "int 0x80",
-            in("rax") NUM as usize,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            in("rdx") arg3,
-            in("rcx") arg4,
-            lateout("rax") result,
+            "svc #{num}",
+            num = const NUM,
+            in("x0") arg1,
+            in("x1") arg2,
+            in("x2") arg3,
+            in("x3") arg4,
+            in("x4") arg5,
+            lateout("x0") result
         );
         core::mem::transmute(result)
     }

@@ -473,3 +473,15 @@ pub fn pspawn(
     let argv: &mut [&str] = &mut argv;
     unsafe { unsafe_pspawn(name, path, argv as *mut _, flags, stdin, stdout, stderr) }
 }
+
+define_syscall! {
+    SyscallNum::Uptime => {
+        /// returns the system uptime in milliseconds
+        sysuptime() u64
+    }
+}
+
+#[inline]
+pub fn uptime() -> u64 {
+    sysuptime()
+}

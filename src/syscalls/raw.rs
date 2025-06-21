@@ -475,13 +475,15 @@ pub fn pspawn(
 }
 
 define_syscall! {
-    SyscallNum::Uptime => {
+    SyscallNum::SysUptime => {
         /// returns the system uptime in milliseconds
-        sysuptime() u64
+        sysuptime(uptime: RequiredPtrMut<u64>)
     }
 }
 
 #[inline]
 pub fn uptime() -> u64 {
-    sysuptime()
+    let mut results: u64 = 0;
+    sysuptime(&mut results);
+    results
 }

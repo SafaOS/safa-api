@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use safa_abi::{
     errors::ErrorStatus,
     raw::{
@@ -23,6 +25,12 @@ define_syscall! {
         /// # Returns
         /// - [`ErrorStatus::InvalidTid`] if thread doesn't exist at the time of wait
         syst_wait(cid: Cid)
+    },
+    SyscallNum::SysTSleep => {
+      /// Sleeps for N ms
+      ///
+      /// should always succeed
+      syst_sleep(n: usize)
     },
     SyscallNum::SysTYield => {
         /// Switches to the next thread in the thread queue of the current CPU
@@ -52,6 +60,16 @@ pub fn yield_now() {
 /// - [`ErrorStatus::InvalidTid`] if the target thread doesn't exist at the time of wait
 pub fn wait(cid: Cid) -> Result<(), ErrorStatus> {
     err_from_u16!(syst_wait(cid))
+}
+
+#[inline]
+/// Sleeps for a given duration
+///
+/// # Returns
+/// - Err(()) if duration as milliseconds is larger than usize::MAX
+pub fn sleep(duration: Duration) -> Result<(), ()> {
+    let ms: usize = duration.as_millis().try_into().map_err(|_| ())?;
+    Ok(assert!(syst_sleep(ms).is_success()))
 }
 
 define_syscall! {

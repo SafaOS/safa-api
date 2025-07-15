@@ -72,8 +72,8 @@ struct Stderr;
 
 fn _print_err(str: &str) {
     let stderr = sysmeta_stderr();
-    _ = syscalls::write(stderr, -1, str.as_bytes());
-    _ = syscalls::sync(stderr);
+    _ = syscalls::io::write(stderr, -1, str.as_bytes());
+    _ = syscalls::io::sync(stderr);
 }
 impl Write for Stderr {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
@@ -103,5 +103,5 @@ macro_rules! printerrln {
 #[panic_handler]
 fn _panic(info: &core::panic::PanicInfo) -> ! {
     printerrln!("Safa-API panicked: {}", info);
-    syscalls::process_exit(1);
+    syscalls::process::exit(1);
 }

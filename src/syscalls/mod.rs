@@ -1,13 +1,7 @@
 //! This module exposes SafaOS's syscalls and their rust counterparts
 
-use crate::raw::io::DirEntry;
-
-use super::errors::ErrorStatus;
-
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
-use super::raw::io::FileAttr;
-use super::raw::{RawSlice, RawSliceMut};
 use core::arch::asm;
 pub use safa_abi::syscalls::SyscallTable as SyscallNum;
 
@@ -239,22 +233,35 @@ macro_rules! define_syscall {
             unsafe(no_mangle)
         )]
         #[inline(always)]
-        pub extern "C" fn $name($($arg: $ty),*) -> SyscallResult {
+        pub extern "C" fn $name($($arg: $ty),*) -> $crate::syscalls::types::SyscallResult {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
             let result = $crate::syscalls::syscall!($num, $( $arg.into_syscall_arg() ),*);
             result
         }
     };
-    {$($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident: $ty:ty),*) $($modifier:tt)* }),*} => {
+    {$($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident: $ty:ty),*) $($modifier:tt)* }),* $(,)?} => {
         $(define_syscall!($num => { $(#[$attrss])* $name($($arg: $ty),*) $($modifier)* });)*
     };
 }
 
 pub(crate) use define_syscall;
 
-mod raw;
-pub use raw::*;
+/// FS Operations related syscalls (that takes a path) such as create, remove, open, rename and etc
+pub mod fs;
+/// I/O Operations related syscalls (that takes a resource) such as read, write, truncate, etc
+pub mod io;
+/// Syscalls and operations that don't fall into a specific category
+pub mod misc;
+/// (SysP) Process related syscalls and operations
+pub mod process;
+/// Syscalls and operations related to the current process
+pub mod process_misc;
+/// (SysR) Resources related syscalls and operations such as destroying resources, duplicating them, etc
+pub mod resources;
+/// (SysT) Thread related syscalls and operations
+pub mod thread;
+
 use types::SyscallResult;
 /// Contains documentation-only types for syscall arguments
 pub mod types;

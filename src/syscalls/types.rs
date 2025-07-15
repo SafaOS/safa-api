@@ -49,7 +49,7 @@ impl IntoSyscallArg for safa_abi::raw::io::OpenOptions {
     }
 }
 
-use super::ErrorStatus;
+use crate::errors::ErrorStatus;
 
 /// A nullable muttable pointer to `T`
 ///

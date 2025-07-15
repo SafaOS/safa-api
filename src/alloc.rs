@@ -22,7 +22,7 @@ impl Block {
         assert!(size <= isize::MAX as usize);
 
         let ptr = get_data_break() as *mut Block;
-        syscalls::sbrk(size as isize).ok()?;
+        syscalls::process_misc::sbrk(size as isize).ok()?;
         unsafe {
             *ptr = Self {
                 free: true,
@@ -35,7 +35,7 @@ impl Block {
 
     #[inline(always)]
     /// Gets the Block metadata of a data ptr,
-    /// unsafe because the pointer had to be made by calling `[Block::data_from_ptr]` on a vaild pointer, otherwise the returned value is invaild
+    /// unsafe because the pointer had to be made by calling `[Block::data_from_ptr]` on a valid pointer, otherwise the returned value is invalid
     pub unsafe fn block_from_data_ptr(data: NonNull<u8>) -> NonNull<Self> {
         unsafe { NonNull::new_unchecked((data.as_ptr() as *mut Block).offset(-1)) }
     }
@@ -57,7 +57,7 @@ pub struct SystemAllocator {
 
 fn get_data_break() -> *mut u8 {
     // Should never fail
-    unsafe { syscalls::sbrk(0).unwrap_unchecked() }
+    unsafe { syscalls::process_misc::sbrk(0).unwrap_unchecked() }
 }
 
 impl SystemAllocator {

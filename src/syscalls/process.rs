@@ -7,7 +7,7 @@ use safa_abi::{
 };
 
 use crate::{
-    process::stdio::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout},
+    process::stdio::{systry_get_stderr, systry_get_stdin, systry_get_stdout},
     syscalls::types::{OptionalPtrMut, OptionalStrPtr, Pid, Ri, StrPtr, SyscallResult},
 };
 
@@ -71,7 +71,7 @@ pub fn wait(pid: Pid) -> Result<usize, ErrorStatus> {
 ///   if they are None they will be inherited from the parent
 ///
 /// - the behavior isn't defined if `priority` is None, currently it will be set to a default
-extern "C" fn syspspawn(
+extern "C" fn sysp_spawn(
     name_ptr: OptionalStrPtr,
     name_len: usize,
     path_ptr: StrPtr,
@@ -89,16 +89,16 @@ extern "C" fn syspspawn(
     stderr: Optional<Ri>,
 ) -> SyscallResult {
     use safa_abi::raw::processes::PSpawnConfig;
-    let (mut stdin, mut stdout, mut stderr): (Option<_>, Option<_>, Option<_>) =
+    let (stdin, stdout, stderr): (Option<_>, Option<_>, Option<_>) =
         (stdin.into(), stdout.into(), stderr.into());
 
     let stdio = {
         if stdin.is_none() && stdout.is_none() && stderr.is_none() {
             None
         } else {
-            stdout.get_or_insert_with(|| sysmeta_stdout());
-            stdin.get_or_insert_with(|| sysmeta_stdin());
-            stderr.get_or_insert_with(|| sysmeta_stderr());
+            let stdout = stdout.or(systry_get_stdout().into());
+            let stdin = stdin.or(systry_get_stdin().into());
+            let stderr = stderr.or(systry_get_stderr().into());
 
             Some(TaskStdio::new(stdout, stdin, stderr))
         }
@@ -157,7 +157,7 @@ pub unsafe fn unsafe_spawn(
     let argv = unsafe { RawSliceMut::from_slices(argv) };
 
     err_from_u16!(
-        syspspawn(
+        sysp_spawn(
             name_ptr,
             name_len,
             path.as_ptr(),

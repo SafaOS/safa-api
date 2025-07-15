@@ -4,7 +4,10 @@
 use core::{cell::UnsafeCell, mem::MaybeUninit};
 
 use crate::syscalls::{self};
-use safa_abi::raw::processes::{AbiStructures, TaskStdio};
+use safa_abi::raw::{
+    processes::{AbiStructures, TaskStdio},
+    Optional,
+};
 
 use crate::Lazy;
 
@@ -55,6 +58,36 @@ static STDERR: Lazy<usize> = Lazy::new(|| {
     }
 });
 
+/// Returns the resource id of the stdout file descriptor (if available)
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+pub extern "C" fn systry_get_stdout() -> Optional<usize> {
+    STDIO.stdout.clone()
+}
+
+/// Returns the resource id of the stderr file descriptor (if available)
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+pub extern "C" fn systry_get_stderr() -> Optional<usize> {
+    STDIO.stderr.clone()
+}
+
+/// Returns the resource id of the stdin file descriptor (if available)
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+pub extern "C" fn systry_get_stdin() -> Optional<usize> {
+    STDIO.stdin.clone()
+}
+
 /// Returns the resource id of the stdout file descriptor
 ///
 /// if there is no stdout file descriptor, it will fall back to `dev:/tty`
@@ -63,7 +96,7 @@ static STDERR: Lazy<usize> = Lazy::new(|| {
     unsafe(no_mangle)
 )]
 #[inline(always)]
-pub extern "C" fn sysmeta_stdout() -> usize {
+pub extern "C" fn sysget_stdout() -> usize {
     **STDOUT
 }
 
@@ -75,7 +108,7 @@ pub extern "C" fn sysmeta_stdout() -> usize {
     unsafe(no_mangle)
 )]
 #[inline(always)]
-pub extern "C" fn sysmeta_stderr() -> usize {
+pub extern "C" fn sysget_stderr() -> usize {
     **STDERR
 }
 
@@ -87,7 +120,7 @@ pub extern "C" fn sysmeta_stderr() -> usize {
     unsafe(no_mangle)
 )]
 #[inline(always)]
-pub extern "C" fn sysmeta_stdin() -> usize {
+pub extern "C" fn sysget_stdin() -> usize {
     **STDIN
 }
 

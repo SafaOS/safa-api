@@ -9,7 +9,7 @@
 
 use core::{cell::LazyCell, fmt::Write, ops::Deref};
 
-use process::stdio::sysmeta_stderr;
+use crate::process::stdio::sysget_stderr;
 
 pub mod errors {
     pub use safa_abi::errors::{ErrorStatus, SysResult};
@@ -71,7 +71,7 @@ unsafe impl<T> Send for Lazy<T> {}
 struct Stderr;
 
 fn _print_err(str: &str) {
-    let stderr = sysmeta_stderr();
+    let stderr = sysget_stderr();
     _ = syscalls::io::write(stderr, -1, str.as_bytes());
     _ = syscalls::io::sync(stderr);
 }

@@ -33,6 +33,15 @@ define_syscall! {
         /// - if `exit_code` is not null, it will be set to the exit code of the process if successful
         sysp_wait(pid: Pid, exit_code: OptionalPtrMut<usize>)
     },
+    SyscallNum::SysPTryCleanUp => {
+      /// Attempts to cleanup the process with pid `pid` and returns it's exit status on success
+      ///
+      /// # Returns
+      /// - [`ErrorStatus::InvalidPid`] if the target process doesn't exist at the time of attempted cleanup
+      ///
+      /// - [`ErrorStatus::Generic`] if the target process isn't dead and awaiting cleanup
+      sysp_try_cleanup(pid: Pid, dest_exit_code: OptionalPtrMut<usize>)
+    },
 }
 
 /// Exits the process with the exit code `code`
@@ -53,6 +62,23 @@ pub fn exit(code: usize) -> ! {
 pub fn wait(pid: Pid) -> Result<usize, ErrorStatus> {
     let mut dest_exit_code = 0;
     err_from_u16!(sysp_wait(pid, &mut dest_exit_code), dest_exit_code)
+}
+#[inline]
+/// Attempts to cleanup the process with pid `pid` and returns it's exit status on success
+///
+/// # Returns
+/// - Err([`ErrorStatus::InvalidPid`]) if the target process doesn't exist at the time of attempted cleanup
+/// - Ok(None) if the target process isn't dead and awaitng cleanup
+/// - Ok(Some(exit_code)) if successful
+pub fn try_cleanup(pid: Pid) -> Result<Option<usize>, ErrorStatus> {
+    let mut dest_exit_code = 0;
+    let results = err_from_u16!(sysp_try_cleanup(pid, &mut dest_exit_code), dest_exit_code);
+
+    match results {
+        Ok(results) => Ok(Some(results)),
+        Err(ErrorStatus::Generic) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 // doesn't use define_syscall because we use a different signature then the rest of the syscalls

@@ -102,9 +102,6 @@ macro_rules! printerrln {
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[panic_handler]
 fn _panic(info: &core::panic::PanicInfo) -> ! {
-    printerrln!("Safa-API panicked: {}", info.message(),);
-    if let Some(location) = info.location() {
-        printerrln!("at {}", location);
-    }
-    syscalls::exit(1);
+    printerrln!("Safa-API panicked: {}", info);
+    syscalls::process_exit(1);
 }

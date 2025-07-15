@@ -41,6 +41,14 @@ impl<T> IntoSyscallArg for *mut T {
     }
 }
 
+impl IntoSyscallArg for safa_abi::raw::io::OpenOptions {
+    #[inline(always)]
+    fn into_syscall_arg(self) -> usize {
+        let bits: u8 = unsafe { core::mem::transmute(self) };
+        bits.into_syscall_arg()
+    }
+}
+
 use super::ErrorStatus;
 
 /// A nullable muttable pointer to `T`
@@ -122,8 +130,10 @@ impl SyscallResult {
     }
 }
 
-/// A process id
-pub type Pid = usize;
+/// A process ID
+pub type Pid = u32;
+/// A thread ID
+pub type Cid = u32;
 
 /// A resource id
 /// this is a generic type that can be used to represent any resource (file, directory, device, directory iterator, etc.)

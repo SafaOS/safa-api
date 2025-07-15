@@ -33,7 +33,7 @@ static STDIN: Lazy<usize> = Lazy::new(|| {
     if let Some(stdin) = stdin {
         stdin
     } else {
-        syscalls::open("dev:/tty").expect("failed to fall back to `dev:/tty` for stdin")
+        syscalls::open_all("dev:/tty").expect("failed to fall back to `dev:/tty` for stdin")
     }
 });
 
@@ -42,7 +42,7 @@ static STDOUT: Lazy<usize> = Lazy::new(|| {
     if let Some(stdout) = stdout {
         stdout
     } else {
-        syscalls::open("dev:/tty").expect("failed to fall back to `dev:/tty` for stdout")
+        syscalls::open_all("dev:/tty").expect("failed to fall back to `dev:/tty` for stdout")
     }
 });
 
@@ -51,7 +51,7 @@ static STDERR: Lazy<usize> = Lazy::new(|| {
     if let Some(stderr) = stderr {
         stderr
     } else {
-        syscalls::open("dev:/tty").expect("failed to fall back to `dev:/tty` for stderr")
+        syscalls::open_all("dev:/tty").expect("failed to fall back to `dev:/tty` for stderr")
     }
 });
 

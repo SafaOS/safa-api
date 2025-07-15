@@ -12,9 +12,11 @@ use super::SyscallNum;
 use super::{define_syscall, DirEntry, FileAttr, RawSlice, RawSliceMut};
 use super::{err_from_u16, ErrorStatus};
 use crate::process::stdio::{sysmeta_stderr, sysmeta_stdin, sysmeta_stdout};
+use crate::syscalls::types::{Cid, OptionalPtr};
 use alloc::vec::Vec;
 use core::ptr;
-use safa_abi::raw::processes::{SpawnFlags, TaskStdio};
+use safa_abi::raw::io::OpenOptions;
+use safa_abi::raw::processes::{ContextPriority, SpawnFlags, TSpawnConfig, TaskStdio};
 use safa_abi::raw::Optional;
 
 define_syscall!(SyscallNum::SysGetDirEntry => {
@@ -34,11 +36,17 @@ pub fn getdirentry(path: &str) -> Result<DirEntry, ErrorStatus> {
 }
 
 define_syscall! {
-    SyscallNum::SysOpen => {
-        /// Opens the file with the path `path` and puts the resource id in `dest_fd`
+    SyscallNum::SysOpenAll => {
+        /// Opens the file with the path `path` and puts the resource id in `dest_fd`, with all permissions
         ///
         /// path must be valid utf-8
-        sysopen(path_ptr: StrPtr, path_len: usize, dest_fd: *mut Ri)
+        sysopen_all(path_ptr: StrPtr, path_len: usize, dest_fd: RequiredPtr<Ri>)
+    },
+    SyscallNum::SysOpen => {
+        /// Opens the file with the path `path` and puts the resource id in `dest_fd`, with a given mode (permissions and flags)
+        ///
+        /// path must be valid utf-8
+        sysopen(path_ptr: StrPtr, path_len: usize, options: OpenOptions, dest_fd: RequiredPtrMut<Ri>)
     },
     SyscallNum::SysCreate => {
         /// Creates the file with the path `path`
@@ -51,20 +59,41 @@ define_syscall! {
         /// path must be valid utf-8
         syscreate_dir(path_ptr: StrPtr, path_len: usize)
     },
-    SyscallNum::SysClose => {
-        /// Closes the file with the resource id `fd`
-        sysclose(fd: Ri)
+    SyscallNum::SysRemovePath => {
+        /// Deletes "removes" a given path
+        ///
+        /// path must be valid utf-8
+        sysremove_path(path_ptr: StrPtr, path_len: usize)
+    },
+    SyscallNum::SysDestroyResource => {
+        /// Destroys "closes" a resource with the id `ri`, a resource can be a File, a Directory, a DirIter, etc...
+        ///
+        /// # Returns
+        /// - [`ErrorStatus::InvalidResource`] if the id `ri` is invalid
+        sysr_destroy(ri: Ri)
     }
 }
 
 #[inline]
-/// Opens the path `path` and returns the resource id of the file descriptor
+/// Opens the path `path` and returns the resource id of the file descriptor, with all permissions
 ///
-/// see [`sysopen`] for underlying syscall
-pub fn open(path: &str) -> Result<Ri, ErrorStatus> {
+/// see [`sysopen_all`] for underlying syscall
+pub fn open_all(path: &str) -> Result<Ri, ErrorStatus> {
     let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
     err_from_u16!(
-        sysopen(path.as_ptr(), path.len(), &raw mut dest_fd),
+        sysopen_all(path.as_ptr(), path.len(), &raw mut dest_fd),
+        dest_fd
+    )
+}
+
+/// Opens the file with the path `path` with a given mode (permissions and flags), returns the resource id of the file descriptor
+///
+/// see [`sysopen`] for underlying syscall
+#[inline]
+pub fn open(path: &str, options: OpenOptions) -> Result<Ri, ErrorStatus> {
+    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
+    err_from_u16!(
+        sysopen(path.as_ptr(), path.len(), options, &raw mut dest_fd),
         dest_fd
     )
 }
@@ -86,11 +115,20 @@ pub fn createdir(path: &str) -> Result<(), ErrorStatus> {
 }
 
 #[inline]
-/// Closes the file with the resource id `fd`
+/// Removes a given path
 ///
-/// see [`sysclose`] for underlying syscall
-pub fn close(fd: Ri) -> Result<(), ErrorStatus> {
-    err_from_u16!(sysclose(fd))
+/// see [`sysremove_path`] for underlying syscall
+pub fn remove_path(path: &str) -> Result<(), ErrorStatus> {
+    err_from_u16!(sysremove_path(path.as_ptr(), path.len()))
+}
+
+/// Destroys "closes" a resource with the id `ri`, a resource can be a File, Directory, DirIter, etc...
+///
+/// # Returns
+/// - [`ErrorStatus::InvalidResource`] if the id `ri` is invalid
+#[inline]
+pub fn destroy_resource(ri: Ri) -> Result<(), ErrorStatus> {
+    err_from_u16!(sysr_destroy(ri))
 }
 
 // Directory Iterator related syscalls
@@ -99,10 +137,6 @@ define_syscall! {
     {
         /// Opens a directory iterator for the directory with the resource id `dir_ri`
         sysdiriter_open(dir_ri: Ri, dest_ri: RequiredPtrMut<Ri>)
-    },
-    SyscallNum::SysDirIterClose => {
-        /// Closes a directory iterator
-        sysdiriter_close(fd: Ri)
     },
     SyscallNum::SysDirIterNext => {
         /// Gets the next directory entry from a directory iterator,
@@ -114,14 +148,6 @@ define_syscall! {
         /// returns [`ErrorStatus::Generic`] (1) if there are no more entries
         sysdiriter_next(dir_ri: Ri, dest_direntry: OptionalPtrMut<DirEntry>)
     }
-}
-
-#[inline]
-/// Closes the directory iterator with the resource id `fd`
-///
-/// see [`sysdiriter_close`] for underlying syscall
-pub fn diriter_close(fd: Ri) -> Result<(), ErrorStatus> {
-    err_from_u16!(sysdiriter_close(fd))
 }
 
 #[inline]
@@ -239,22 +265,47 @@ pub fn dup(ri: Ri) -> Result<Ri, ErrorStatus> {
 
 // Process related syscalls
 define_syscall! {
+    SyscallNum::SysTSpawn => {
+        /// Spawns a thread at the entry point `entry_point` with the config `config`
+        ///
+        /// - if `dest_cid` is not null it will be set to the spawned thread's ID (CID or TID)
+        syst_spawn_raw(entry_point: usize, config: RequiredPtr<TSpawnConfig>, dest_cid: OptionalPtrMut<Cid>)
+    },
     SyscallNum::SysSbrk => {
         /// Increases the range of the process's data break by `size` bytes and puts the new break pointer in `target_ptr`
         syssbrk(size: isize, target_ptr: OptionalPtrMut<*mut u8>)
     },
-    SyscallNum::SysExit => {
-        /// Exits the process with the exit code `code`
-        sysexit(code: usize) unreachable
+    SyscallNum::SysPExit => {
+        /// Exits the process with the exit code [`code`]
+        sysp_exit(code: usize) unreachable
     },
-    SyscallNum::SysYield => {
-        /// Switches to the next process/thread
+    SyscallNum::SysTExit => {
+        /// Exits the current thread, threads don't have an exit code
+        /// however if the thread was the last thread in the process,
+        /// then the process will exit with code [`code`]
+        syst_exit(code: usize) unreachable
+    },
+    SyscallNum::SysTYield => {
+        /// Switches to the next thread in the thread queue of the current CPU
         sysyield()
     },
-    SyscallNum::SysWait => {
-        /// Waits for the process with the resource id `pid` to exit
-        /// if `exit_code` is not null, it will be set to the exit code of the process
-        syswait(pid: Pid, exit_code: *mut usize)
+    SyscallNum::SysPWait => {
+        /// Waits for a child process with the pid `pid` to exit
+        ///
+        /// # Returns
+        /// - [`ErrorStatus::InvalidPid`] if the target process doesn't exist at the time of wait
+        ///
+        /// - [`ErrorStatus::MissingPermissions`] if the target process isn't a child of self
+        ///
+        /// - if `exit_code` is not null, it will be set to the exit code of the process if successful
+        sysp_wait(pid: Pid, exit_code: OptionalPtrMut<usize>)
+    },
+    SyscallNum::SysTWait => {
+        /// Waits for a child thread with the cid `cid` to exit
+        ///
+        /// # Returns
+        /// - [`ErrorStatus::InvalidTid`] if thread doesn't exist at the time of wait
+        syst_wait(cid: Cid)
     },
     SyscallNum::SysCHDir => {
         /// Changes the current working directory to the path `buf` with length `buf_len`
@@ -280,11 +331,21 @@ pub fn sbrk(size: isize) -> Result<*mut u8, ErrorStatus> {
     err_from_u16!(syssbrk(size, &mut target_ptr), target_ptr)
 }
 
+/// Exits the process with the exit code `code`
 #[inline]
-pub fn exit(code: usize) -> ! {
-    sysexit(code)
+pub fn process_exit(code: usize) -> ! {
+    sysp_exit(code)
 }
 
+/// Exits the current thread, threads don't have an exit code
+/// however if the thread was the last thread in the process,
+/// then the process will exit with code `code`
+#[inline]
+pub fn thread_exit(code: usize) -> ! {
+    syst_exit(code)
+}
+
+/// Switches to the next thread in the thread queue of the current CPU
 #[inline]
 pub fn yield_now() {
     debug_assert!(sysyield().is_success())
@@ -293,11 +354,25 @@ pub fn yield_now() {
 #[inline]
 /// Waits for the process with the resource id `pid` to exit
 /// and returns the exit code of the process
+/// # Returns
+/// - Ok(exit_code) if the target process was found, was a child of self, and was awaited successfully
 ///
-/// will return 0 as an exit code if process wasn't found
-pub fn wait(pid: Pid) -> Result<usize, ErrorStatus> {
+/// - [`ErrorStatus::InvalidPid`] if the target process doesn't exist at the time of wait
+///
+/// - [`ErrorStatus::MissingPermissions`] if the target process isn't a child of self
+pub fn process_wait(pid: Pid) -> Result<usize, ErrorStatus> {
     let mut dest_exit_code = 0;
-    err_from_u16!(syswait(pid, &mut dest_exit_code), dest_exit_code)
+    err_from_u16!(sysp_wait(pid, &mut dest_exit_code), dest_exit_code)
+}
+
+#[inline]
+/// Waits for the thread with the id `cid` to exit
+//
+/// # Returns
+///
+/// - [`ErrorStatus::InvalidPid`] if the target thread doesn't exist at the time of wait
+pub fn thread_wait(cid: Cid) -> Result<(), ErrorStatus> {
+    err_from_u16!(syst_wait(cid))
 }
 
 #[inline]
@@ -347,6 +422,120 @@ pub fn reboot() -> ! {
     sysreboot()
 }
 
+/// Spawns a thread as a child of self
+/// # Arguments
+/// - `entry_point`: a pointer to the main function of the thread,
+/// the main function looks like this: `fn main(thread_id: Cid, argument_ptr: usize)` see `dest_cid` below for thread_id, argument_ptr == `argument_ptr`
+///
+/// - `argument_ptr`: a pointer to the arguments that will be passed to the thread, this pointer will be based as is,
+/// and therefore can also be used to pass a single usize argument
+///
+/// - `priotrity`: the pritority of the thread in the thread queue, will default to the parent's
+///
+/// - `dest_cid`: if not null, will be set to the thread ID of the spawned thread
+#[cfg_attr(
+    not(any(feature = "std", feature = "rustc-dep-of-std")),
+    unsafe(no_mangle)
+)]
+#[inline(always)]
+extern "C" fn syst_spawn(
+    entry_point: usize,
+    argument_ptr: OptionalPtr<()>,
+    priority: Optional<ContextPriority>,
+    dest_cid: OptionalPtrMut<Cid>,
+) -> SyscallResult {
+    let config = TSpawnConfig::new(argument_ptr, priority.into(), None);
+    syscall!(
+        SyscallNum::SysTSpawn,
+        entry_point,
+        &config as *const _ as usize,
+        dest_cid as usize
+    )
+}
+
+#[inline]
+/// Spawns a thread as a child of self
+/// unlike [`thread_spawn`], this will pass no arguments to the thread
+/// # Arguments
+/// - `entry_point`: a pointer to the main function of the thread
+///
+/// - `priotrity`: the pritority of the thread in the thread queue, will default to the parent's
+///
+/// # Returns
+/// - the thread ID of the spawned thread
+pub fn thread_spawn3(
+    entry_point: fn(thread_id: Cid) -> !,
+    priority: Option<ContextPriority>,
+) -> Result<Cid, ErrorStatus> {
+    let mut cid = 0;
+    err_from_u16!(
+        syst_spawn(
+            entry_point as usize,
+            core::ptr::null(),
+            priority.into(),
+            &mut cid
+        ),
+        cid
+    )
+}
+
+#[inline]
+/// Spawns a thread as a child of self
+/// unlike [`thread_spawn`], instead of taking a reference as an argument to pass to the thread, this will take a usize
+/// # Arguments
+/// - `entry_point`: a pointer to the main function of the thread
+///
+/// - `argument`: a usize argument that will be passed to the thread
+///
+/// - `priotrity`: the pritority of the thread in the thread queue, will default to the parent's
+///
+/// # Returns
+/// - the thread ID of the spawned thread
+pub fn thread_spawn2(
+    entry_point: fn(thread_id: Cid, argument: usize) -> !,
+    argument: usize,
+    priority: Option<ContextPriority>,
+) -> Result<Cid, ErrorStatus> {
+    let mut cid = 0;
+    err_from_u16!(
+        syst_spawn(
+            entry_point as usize,
+            argument as *const (),
+            priority.into(),
+            &mut cid
+        ),
+        cid
+    )
+}
+
+#[inline]
+/// Spawns a thread as a child of self
+/// # Arguments
+/// - `entry_point`: a pointer to the main function of the thread
+///
+/// - `argument_ptr`: a pointer to the arguments that will be passed to the thread, this pointer will be based as is,
+///
+/// - `priotrity`: the pritority of the thread in the thread queue, will default to the parent's
+///
+/// # Returns
+/// - the thread ID of the spawned thread
+pub fn thread_spawn<T>(
+    entry_point: fn(thread_id: Cid, argument_ptr: &'static T) -> !,
+    argument_ptr: &'static T,
+    priority: Option<ContextPriority>,
+) -> Result<Cid, ErrorStatus> {
+    let mut cid = 0;
+    err_from_u16!(
+        syst_spawn(
+            entry_point as usize,
+            argument_ptr as *const T as *const (),
+            priority.into(),
+            &mut cid
+        ),
+        cid
+    )
+}
+
 // doesn't use define_syscall because we use a different signature then the rest of the syscalls
 #[cfg_attr(
     not(any(feature = "std", feature = "rustc-dep-of-std")),
@@ -356,23 +545,31 @@ pub fn reboot() -> ! {
 /// Spawns a new process with the path `path` with arguments `argv` and flags `flags`
 /// name_ptr can be null, in which case the name will be the path
 /// path and name must be valid utf-8
-/// if `dest_pid` is not null, it will be set to the pid of the new process
-/// if `stdin`, `stdout`, or `stderr` are not `None`, the corresponding file descriptors will be inherited from the parent
-/// if they are None they will be inherited from the parent
+///
+/// - if `dest_pid` is not null, it will be set to the pid of the new process
+///
+/// - if `stdin`, `stdout`, or `stderr` are not `None`, the corresponding file descriptors will be inherited from the parent
+///   if they are None they will be inherited from the parent
+///
+/// - the behavior isn't defined if `priority` is None, currently it will be set to a default
 extern "C" fn syspspawn(
     name_ptr: OptionalStrPtr,
     name_len: usize,
     path_ptr: StrPtr,
     path_len: usize,
+    // args
     argv_ptr: OptionalPtrMut<RawSlice<u8>>,
     argv_len: usize,
+    // flags and return
     flags: SpawnFlags,
+    priority: Optional<ContextPriority>,
     dest_pid: OptionalPtrMut<Pid>,
+    // stdio
     stdin: Optional<Ri>,
     stdout: Optional<Ri>,
     stderr: Optional<Ri>,
 ) -> SyscallResult {
-    use safa_abi::raw::processes::SpawnConfig;
+    use safa_abi::raw::processes::PSpawnConfig;
     let (mut stdin, mut stdout, mut stderr): (Option<_>, Option<_>, Option<_>) =
         (stdin.into(), stdout.into(), stderr.into());
 
@@ -392,13 +589,14 @@ extern "C" fn syspspawn(
     let stdio_ptr = stdio.map(|m| m as *const _).unwrap_or(core::ptr::null());
     let (_, mut env) = unsafe { crate::process::env::duplicate_env() };
 
-    let config = SpawnConfig {
-        version: 1,
+    let config = PSpawnConfig {
+        revision: 2,
         name: unsafe { RawSlice::from_raw_parts(name_ptr, name_len) },
         argv: unsafe { RawSliceMut::from_raw_parts(argv_ptr, argv_len) },
         env: unsafe { RawSliceMut::from_raw_parts(env.as_mut_ptr(), env.len()) },
         flags,
         stdio: stdio_ptr,
+        priority,
     };
 
     syscall!(
@@ -413,15 +611,19 @@ extern "C" fn syspspawn(
 /// spawns a new process
 /// # Arguments
 /// * `stdin`, `stdout`, `stderr` are the file descriptors of stdio, if None, they will be inherited from the parent
+/// * `priority` is the process's default priority (that the threads, including the root one, will inherit by default),
+/// if set to None the behavior isn't well defined, however for now it will default to a constant value
 /// # Safety
-/// `argv` must be valid pointers to a slice of slices of `&str`
-/// `argv` will become invalid after use, using them is UB
+/// - `argv` must be valid pointers to a slice of slices of `&str`
+///
+/// - `argv` will become invalid after use, using them is UB
 #[inline]
 pub unsafe fn unsafe_pspawn(
     name: Option<&str>,
     path: &str,
     argv: *mut [&str],
     flags: SpawnFlags,
+    priority: Option<ContextPriority>,
     stdin: Option<Ri>,
     stdout: Option<Ri>,
     stderr: Option<Ri>,
@@ -444,6 +646,7 @@ pub unsafe fn unsafe_pspawn(
             argv.as_mut_ptr(),
             argv.len(),
             flags,
+            priority.into(),
             &mut pid,
             stdin.into(),
             stdout.into(),
@@ -466,12 +669,24 @@ pub fn pspawn(
     path: &str,
     mut argv: Vec<&str>,
     flags: SpawnFlags,
+    priority: Option<ContextPriority>,
     stdin: Option<Ri>,
     stdout: Option<Ri>,
     stderr: Option<Ri>,
 ) -> Result<Pid, ErrorStatus> {
     let argv: &mut [&str] = &mut argv;
-    unsafe { unsafe_pspawn(name, path, argv as *mut _, flags, stdin, stdout, stderr) }
+    unsafe {
+        unsafe_pspawn(
+            name,
+            path,
+            argv as *mut _,
+            flags,
+            priority,
+            stdin,
+            stdout,
+            stderr,
+        )
+    }
 }
 
 define_syscall! {

@@ -94,5 +94,5 @@ pub unsafe extern "C" fn _c_api_init(
 
     let (argc, argv) = c_main_args(args);
     let result = main(argc, argv);
-    syscalls::exit(result as usize)
+    syscalls::process_exit(result as usize)
 }

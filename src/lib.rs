@@ -49,6 +49,19 @@ pub mod process;
 pub mod raw;
 pub mod syscalls;
 
+#[macro_export]
+macro_rules! exported_func {
+    {$($meta: meta)? $($inner: tt)*} => {
+        $($meta)?
+        #[cfg_attr(
+            not(any(feature = "std", feature = "rustc-dep-of-std")),
+            unsafe(no_mangle)
+        )]
+        #[cfg_attr(any(feature = "std", feature = "rustc-dep-of-std"), inline(always))]
+        $($inner)*
+    };
+}
+
 // FIXME: introduce locks when threads are added
 pub(crate) struct Lazy<T>(core::cell::LazyCell<T>);
 impl<T> Lazy<T> {

@@ -1,12 +1,13 @@
 use safa_abi::{
     errors::ErrorStatus,
     raw::{
-        processes::{ContextPriority, SpawnFlags, TaskStdio},
+        processes::{ContextPriority, ProcessStdio, SpawnFlags},
         Optional, RawSlice, RawSliceMut,
     },
 };
 
 use crate::{
+    exported_func,
     process::stdio::{systry_get_stderr, systry_get_stdin, systry_get_stdout},
     syscalls::types::{OptionalPtrMut, OptionalStrPtr, Pid, Ri, StrPtr, SyscallResult},
 };
@@ -81,76 +82,75 @@ pub fn try_cleanup(pid: Pid) -> Result<Option<usize>, ErrorStatus> {
     }
 }
 
-// doesn't use define_syscall because we use a different signature then the rest of the syscalls
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-/// Spawns a new process with the path `path` with arguments `argv` and flags `flags`
-/// name_ptr can be null, in which case the name will be the path
-/// path and name must be valid utf-8
-///
-/// - if `dest_pid` is not null, it will be set to the pid of the new process
-///
-/// - if `stdin`, `stdout`, or `stderr` are not `None`, the corresponding file descriptors will be inherited from the parent
-///   if they are None they will be inherited from the parent
-///
-/// - the behavior isn't defined if `priority` is None, currently it will be set to a default
-extern "C" fn sysp_spawn(
-    name_ptr: OptionalStrPtr,
-    name_len: usize,
-    path_ptr: StrPtr,
-    path_len: usize,
-    // args
-    argv_ptr: OptionalPtrMut<RawSlice<u8>>,
-    argv_len: usize,
-    // flags and return
-    flags: SpawnFlags,
-    priority: Optional<ContextPriority>,
-    dest_pid: OptionalPtrMut<Pid>,
-    // stdio
-    stdin: Optional<Ri>,
-    stdout: Optional<Ri>,
-    stderr: Optional<Ri>,
-) -> SyscallResult {
-    use safa_abi::raw::processes::PSpawnConfig;
-    let (stdin, stdout, stderr): (Option<_>, Option<_>, Option<_>) =
-        (stdin.into(), stdout.into(), stderr.into());
+exported_func! {
+    // doesn't use define_syscall because we use a different signature then the rest of the syscalls
+    /// Spawns a new process with the path `path` with arguments `argv` and flags `flags`
+    /// name_ptr can be null, in which case the name will be the path
+    /// path and name must be valid utf-8
+    ///
+    /// - if `dest_pid` is not null, it will be set to the pid of the new process
+    ///
+    /// - if `stdin`, `stdout`, or `stderr` are not `None`, the corresponding file descriptors will be inherited from the parent
+    ///   if they are None they will be inherited from the parent
+    ///
+    /// - the behavior isn't defined if `priority` is None, currently it will be set to a default
+    extern "C" fn sysp_spawn(
+        name_ptr: OptionalStrPtr,
+        name_len: usize,
+        path_ptr: StrPtr,
+        path_len: usize,
+        // args
+        argv_ptr: OptionalPtrMut<RawSlice<u8>>,
+        argv_len: usize,
+        // flags and return
+        flags: SpawnFlags,
+        priority: Optional<ContextPriority>,
+        dest_pid: OptionalPtrMut<Pid>,
+        // stdio
+        stdin: Optional<Ri>,
+        stdout: Optional<Ri>,
+        stderr: Optional<Ri>,
+        custom_stack_size: Optional<usize>,
+    ) -> SyscallResult {
+        use safa_abi::raw::processes::PSpawnConfig;
+        let (stdin, stdout, stderr): (Option<_>, Option<_>, Option<_>) =
+            (stdin.into(), stdout.into(), stderr.into());
 
-    let stdio = {
-        if stdin.is_none() && stdout.is_none() && stderr.is_none() {
-            None
-        } else {
-            let stdout = stdout.or(systry_get_stdout().into());
-            let stdin = stdin.or(systry_get_stdin().into());
-            let stderr = stderr.or(systry_get_stderr().into());
+        let stdio = {
+            if stdin.is_none() && stdout.is_none() && stderr.is_none() {
+                None
+            } else {
+                let stdout = stdout.or(systry_get_stdout().into());
+                let stdin = stdin.or(systry_get_stdin().into());
+                let stderr = stderr.or(systry_get_stderr().into());
 
-            Some(TaskStdio::new(stdout, stdin, stderr))
-        }
-    };
+                Some(ProcessStdio::new(stdout, stdin, stderr))
+            }
+        };
 
-    let stdio = stdio.as_ref();
-    let stdio_ptr = stdio.map(|m| m as *const _).unwrap_or(core::ptr::null());
-    let (_, mut env) = unsafe { crate::process::env::duplicate_env() };
+        let stdio = stdio.as_ref();
+        let stdio_ptr = stdio.map(|m| m as *const _).unwrap_or(core::ptr::null());
+        let (_, mut env) = unsafe { crate::process::env::duplicate_env() };
 
-    let config = PSpawnConfig {
-        revision: 2,
-        name: unsafe { RawSlice::from_raw_parts(name_ptr, name_len) },
-        argv: unsafe { RawSliceMut::from_raw_parts(argv_ptr, argv_len) },
-        env: unsafe { RawSliceMut::from_raw_parts(env.as_mut_ptr(), env.len()) },
-        flags,
-        stdio: stdio_ptr,
-        priority,
-    };
+        let config = PSpawnConfig {
+            revision: 3,
+            name: unsafe { RawSlice::from_raw_parts(name_ptr, name_len) },
+            argv: unsafe { RawSliceMut::from_raw_parts(argv_ptr, argv_len) },
+            env: unsafe { RawSliceMut::from_raw_parts(env.as_mut_ptr(), env.len()) },
+            flags,
+            stdio: stdio_ptr,
+            priority,
+            custom_stack_size,
+        };
 
-    syscall!(
-        SyscallNum::SysPSpawn,
-        path_ptr as usize,
-        path_len,
-        (&raw const config) as usize,
-        dest_pid as *mut _ as usize,
-    )
+        syscall!(
+            SyscallNum::SysPSpawn,
+            path_ptr as usize,
+            path_len,
+            (&raw const config) as usize,
+            dest_pid as *mut _ as usize,
+        )
+    }
 }
 
 /// spawns a new process
@@ -172,6 +172,7 @@ pub unsafe fn unsafe_spawn(
     stdin: Option<Ri>,
     stdout: Option<Ri>,
     stderr: Option<Ri>,
+    custom_stack_size: Option<usize>,
 ) -> Result<Pid, ErrorStatus> {
     let mut pid = 0;
 
@@ -196,6 +197,7 @@ pub unsafe fn unsafe_spawn(
             stdin.into(),
             stdout.into(),
             stderr.into(),
+            custom_stack_size.into(),
         ),
         pid
     )
@@ -218,6 +220,7 @@ pub fn spawn(
     stdin: Option<Ri>,
     stdout: Option<Ri>,
     stderr: Option<Ri>,
+    custom_stack_size: Option<usize>,
 ) -> Result<Pid, ErrorStatus> {
     let argv: &mut [&str] = &mut argv;
     unsafe {
@@ -230,6 +233,7 @@ pub fn spawn(
             stdin,
             stdout,
             stderr,
+            custom_stack_size,
         )
     }
 }

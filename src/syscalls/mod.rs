@@ -218,7 +218,7 @@ macro_rules! define_syscall {
             not(any(feature = "std", feature = "rustc-dep-of-std")),
             unsafe(no_mangle)
         )]
-        #[inline(always)]
+        #[cfg_attr(any(feature = "std", feature = "rustc-dep-of-std"), inline(always))]
         pub extern "C" fn $name($($arg: $ty),*) -> ! {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
@@ -232,7 +232,7 @@ macro_rules! define_syscall {
             not(any(feature = "std", feature = "rustc-dep-of-std")),
             unsafe(no_mangle)
         )]
-        #[inline(always)]
+        #[cfg_attr(any(feature = "std", feature = "rustc-dep-of-std"), inline(always))]
         pub extern "C" fn $name($($arg: $ty),*) -> $crate::syscalls::types::SyscallResult {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;

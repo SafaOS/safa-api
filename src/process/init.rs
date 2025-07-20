@@ -3,6 +3,7 @@ use core::ptr::NonNull;
 
 use crate::{
     alloc::GLOBAL_SYSTEM_ALLOCATOR,
+    exported_func,
     syscalls::{self},
 };
 use safa_abi::raw::{processes::AbiStructures, NonNullSlice, RawSliceMut};
@@ -33,23 +34,20 @@ fn init_env(env: RawSliceMut<NonNullSlice<u8>>) {
     }
 }
 
-/// Initializes the safa-api
-/// if your programs are designed as C main function,
-///
-/// use [`_c_api_init`] instead
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-pub extern "C" fn sysapi_init(
-    args: RawSliceMut<NonNullSlice<u8>>,
-    env: RawSliceMut<NonNullSlice<u8>>,
-    task_abi_structures: AbiStructures,
-) {
-    init_args(args);
-    init_env(env);
-    init_meta(task_abi_structures);
+exported_func! {
+    /// Initializes the safa-api
+    /// if your programs are designed as C main function,
+    ///
+    /// use [`_c_api_init`] instead
+    pub extern "C" fn sysapi_init(
+        args: RawSliceMut<NonNullSlice<u8>>,
+        env: RawSliceMut<NonNullSlice<u8>>,
+        task_abi_structures: AbiStructures,
+    ) {
+        init_args(args);
+        init_env(env);
+        init_meta(task_abi_structures);
+    }
 }
 
 /// Initializes the safa-api, converts arguments to C-style arguments, calls `main`, and exits with the result

@@ -8,7 +8,10 @@ use safa_abi::{
     },
 };
 
-use crate::syscalls::types::{Cid, OptionalPtr, OptionalPtrMut, RequiredPtr, SyscallResult};
+use crate::{
+    exported_func,
+    syscalls::types::{Cid, OptionalPtr, OptionalPtrMut, RequiredPtr, SyscallResult},
+};
 
 use super::{define_syscall, SyscallNum};
 
@@ -81,35 +84,38 @@ define_syscall! {
     },
 }
 
-/// Spawns a thread as a child of self
-/// # Arguments
-/// - `entry_point`: a pointer to the main function of the thread,
-/// the main function looks like this: `fn main(thread_id: Cid, argument_ptr: usize)` see `dest_cid` below for thread_id, argument_ptr == `argument_ptr`
-///
-/// - `argument_ptr`: a pointer to the arguments that will be passed to the thread, this pointer will be based as is,
-/// and therefore can also be used to pass a single usize argument
-///
-/// - `priotrity`: the pritority of the thread in the thread queue, will default to the parent's
-///
-/// - `dest_cid`: if not null, will be set to the thread ID of the spawned thread
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-extern "C" fn syst_spawn(
-    entry_point: usize,
-    argument_ptr: OptionalPtr<()>,
-    priority: Optional<ContextPriority>,
-    dest_cid: OptionalPtrMut<Cid>,
-) -> SyscallResult {
-    let config = TSpawnConfig::new(argument_ptr, priority.into(), None);
-    syscall!(
-        SyscallNum::SysTSpawn,
-        entry_point,
-        &config as *const _ as usize,
-        dest_cid as usize
-    )
+exported_func! {
+    /// Spawns a thread as a child of self
+    /// # Arguments
+    /// - `entry_point`: a pointer to the main function of the thread,
+    /// the main function looks like this: `fn main(thread_id: Cid, argument_ptr: usize)` see `dest_cid` below for thread_id, argument_ptr == `argument_ptr`
+    ///
+    /// - `argument_ptr`: a pointer to the arguments that will be passed to the thread, this pointer will be based as is,
+    /// and therefore can also be used to pass a single usize argument
+    ///
+    /// - `priotrity`: the pritority of the thread in the thread queue, will default to the parent's
+    ///
+    /// - `dest_cid`: if not null, will be set to the thread ID of the spawned thread
+    extern "C" fn syst_spawn(
+        entry_point: usize,
+        argument_ptr: OptionalPtr<()>,
+        priority: Optional<ContextPriority>,
+        custom_stack_size: Optional<usize>,
+        dest_cid: OptionalPtrMut<Cid>,
+    ) -> SyscallResult {
+        let config = TSpawnConfig::new(
+            argument_ptr,
+            priority.into(),
+            None,
+            custom_stack_size.into(),
+        );
+        syscall!(
+            SyscallNum::SysTSpawn,
+            entry_point,
+            &config as *const _ as usize,
+            dest_cid as usize
+        )
+    }
 }
 
 #[inline]
@@ -125,16 +131,13 @@ extern "C" fn syst_spawn(
 pub fn spawn3(
     entry_point: fn(thread_id: Cid) -> !,
     priority: Option<ContextPriority>,
+    custom_stack_size: Option<usize>,
 ) -> Result<Cid, ErrorStatus> {
-    let mut cid = 0;
-    err_from_u16!(
-        syst_spawn(
-            entry_point as usize,
-            core::ptr::null(),
-            priority.into(),
-            &mut cid
-        ),
-        cid
+    spawn_inner(
+        entry_point as usize,
+        core::ptr::null(),
+        priority,
+        custom_stack_size,
     )
 }
 
@@ -154,16 +157,13 @@ pub fn spawn2(
     entry_point: fn(thread_id: Cid, argument: usize) -> !,
     argument: usize,
     priority: Option<ContextPriority>,
+    custom_stack_size: Option<usize>,
 ) -> Result<Cid, ErrorStatus> {
-    let mut cid = 0;
-    err_from_u16!(
-        syst_spawn(
-            entry_point as usize,
-            argument as *const (),
-            priority.into(),
-            &mut cid
-        ),
-        cid
+    spawn_inner(
+        entry_point as usize,
+        argument as *const (),
+        priority,
+        custom_stack_size,
     )
 }
 
@@ -182,13 +182,30 @@ pub fn spawn<T>(
     entry_point: fn(thread_id: Cid, argument_ptr: &'static T) -> !,
     argument_ptr: &'static T,
     priority: Option<ContextPriority>,
+    custom_stack_size: Option<usize>,
+) -> Result<Cid, ErrorStatus> {
+    spawn_inner(
+        entry_point as usize,
+        argument_ptr as *const T as *const (),
+        priority,
+        custom_stack_size,
+    )
+}
+
+#[inline(always)]
+fn spawn_inner(
+    entry_point: usize,
+    argument_ptr: *const (),
+    priority: Option<ContextPriority>,
+    custom_stack_size: Option<usize>,
 ) -> Result<Cid, ErrorStatus> {
     let mut cid = 0;
     err_from_u16!(
         syst_spawn(
-            entry_point as usize,
-            argument_ptr as *const T as *const (),
+            entry_point,
+            argument_ptr,
             priority.into(),
+            custom_stack_size.into(),
             &mut cid
         ),
         cid

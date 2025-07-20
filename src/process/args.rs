@@ -4,6 +4,8 @@
 use core::{cell::UnsafeCell, mem::MaybeUninit, ptr::NonNull};
 use safa_abi::raw::{NonNullSlice, Optional};
 
+use crate::exported_func;
+
 // args
 
 #[derive(Debug, Clone, Copy)]
@@ -72,24 +74,18 @@ impl RawArgsStatic {
 
 pub(super) static RAW_ARGS: RawArgsStatic = RawArgsStatic::new();
 
-/// Get the number of arguments passed to the program.
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-pub extern "C" fn sysget_argc() -> usize {
-    unsafe { RAW_ARGS.len() }
+exported_func! {
+    /// Get the number of arguments passed to the program.
+    pub extern "C" fn sysget_argc() -> usize {
+        unsafe { RAW_ARGS.len() }
+    }
 }
 
-/// Get the argument at the given index.
-#[cfg_attr(
-    not(any(feature = "std", feature = "rustc-dep-of-std")),
-    unsafe(no_mangle)
-)]
-#[inline(always)]
-pub extern "C" fn sysget_arg(index: usize) -> Optional<NonNullSlice<u8>> {
-    unsafe { RAW_ARGS.get(index).into() }
+exported_func! {
+    /// Get the argument at the given index.
+    pub extern "C" fn sysget_arg(index: usize) -> Optional<NonNullSlice<u8>> {
+        unsafe { RAW_ARGS.get(index).into() }
+    }
 }
 
 /// An iterator over the arguments passed to the program.

@@ -1,37 +1,42 @@
 //! Wrapper around the arguments passed to the program.
 //! api should be initialized before use see [`super::init`]
 
-use core::{cell::UnsafeCell, mem::MaybeUninit, ptr::NonNull};
-use safa_abi::raw::{NonNullSlice, Optional};
+use safa_abi::ffi::{option::OptZero, str::Str};
 
 use crate::exported_func;
+use core::{cell::UnsafeCell, mem::MaybeUninit, ptr::NonNull};
 
 // args
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct RawArgs {
-    args: NonNull<[NonNullSlice<u8>]>,
+    args: NonNull<[&'static str]>,
 }
 
 impl RawArgs {
-    pub const fn new(args: NonNull<[NonNullSlice<u8>]>) -> Self {
-        Self { args }
+    pub const fn new(args: Option<NonNull<[&'static str]>>) -> Self {
+        Self {
+            args: match args {
+                Some(args) => args,
+                None => unsafe { NonNull::new_unchecked(&mut []) },
+            },
+        }
     }
 
-    fn len(&self) -> usize {
+    const fn len(&self) -> usize {
         unsafe { self.args.as_ref().len() }
     }
 
-    fn get(&self, index: usize) -> Option<NonNullSlice<u8>> {
+    fn get(&self, index: usize) -> Option<&'static str> {
         unsafe { self.args.as_ref().get(index).copied() }
     }
 
-    unsafe fn into_slice(self) -> &'static [NonNullSlice<u8>] {
+    const unsafe fn into_slice(self) -> &'static [&'static str] {
         unsafe { self.args.as_ref() }
     }
 }
 
-pub(super) struct RawArgsStatic(UnsafeCell<MaybeUninit<Option<RawArgs>>>);
+pub(super) struct RawArgsStatic(UnsafeCell<MaybeUninit<RawArgs>>);
 unsafe impl Sync for RawArgsStatic {}
 
 impl RawArgsStatic {
@@ -39,35 +44,28 @@ impl RawArgsStatic {
         Self(UnsafeCell::new(MaybeUninit::uninit()))
     }
 
-    pub unsafe fn init(&self, args: Option<RawArgs>) {
+    pub unsafe fn init(&self, args: RawArgs) {
         unsafe {
             self.0.get().write(MaybeUninit::new(args));
         }
     }
 
-    unsafe fn get(&self, index: usize) -> Option<NonNullSlice<u8>> {
-        unsafe { (*self.0.get()).assume_init()?.get(index) }
+    const unsafe fn get_unchecked(&self) -> &mut RawArgs {
+        (*self.0.get()).assume_init_mut()
     }
 
-    unsafe fn len(&self) -> usize {
-        if let Some(args) = unsafe { (*self.0.get()).assume_init() } {
-            args.len()
-        } else {
-            0
-        }
+    unsafe fn get(&self, index: usize) -> Option<&'static str> {
+        unsafe { self.get_unchecked().get(index) }
     }
 
-    unsafe fn get_raw(&self) -> Option<RawArgs> {
-        unsafe { (*self.0.get()).assume_init() }
+    const unsafe fn len(&self) -> usize {
+        unsafe { self.get_unchecked().len() }
     }
 
-    pub unsafe fn as_slice(&self) -> &'static [NonNullSlice<u8>] {
+    pub const unsafe fn as_slice(&self) -> &'static [&'static str] {
         unsafe {
-            if let Some(raw) = self.get_raw() {
-                raw.into_slice()
-            } else {
-                &mut []
-            }
+            let raw = self.get_unchecked();
+            raw.into_slice()
         }
     }
 }
@@ -83,14 +81,14 @@ exported_func! {
 
 exported_func! {
     /// Get the argument at the given index.
-    pub extern "C" fn sysget_arg(index: usize) -> Optional<NonNullSlice<u8>> {
-        unsafe { RAW_ARGS.get(index).into() }
+    pub extern "C" fn sysget_arg(index: usize) -> OptZero<Str> {
+        unsafe { RAW_ARGS.get(index).map(|s| Str::from_str(s)).into() }
     }
 }
 
 /// An iterator over the arguments passed to the program.
 pub struct ArgsIter {
-    args: &'static [NonNullSlice<u8>],
+    args: &'static [&'static str],
     index: usize,
 }
 
@@ -100,11 +98,11 @@ impl ArgsIter {
         Self { args, index: 0 }
     }
 
-    pub fn get_index(&self, index: usize) -> Option<NonNullSlice<u8>> {
+    pub fn get_index(&self, index: usize) -> Option<&'static str> {
         self.args.get(index).copied()
     }
 
-    pub fn next(&mut self) -> Option<NonNullSlice<u8>> {
+    pub fn next(&mut self) -> Option<&'static str> {
         if self.index < self.args.len() {
             let arg = self.args[self.index];
             self.index += 1;

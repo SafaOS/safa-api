@@ -31,5 +31,6 @@ pub fn destroy_resource(ri: Ri) -> Result<(), ErrorStatus> {
 /// and returns the new resource id
 pub fn dup(ri: Ri) -> Result<Ri, ErrorStatus> {
     let mut dest_ri = 0xAAAAAAAAAAAAAAAAusize;
-    err_from_u16!(sysr_dup(ri, &mut dest_ri), dest_ri)
+    let ptr = unsafe { RequiredPtrMut::new_unchecked(&mut dest_ri) };
+    err_from_u16!(sysr_dup(ri, ptr), dest_ri)
 }

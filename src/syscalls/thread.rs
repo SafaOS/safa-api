@@ -1,16 +1,13 @@
-use core::time::Duration;
+use core::{num::NonZero, time::Duration};
 
 use safa_abi::{
     errors::ErrorStatus,
-    raw::{
-        processes::{ContextPriority, TSpawnConfig},
-        Optional,
-    },
+    process::{RawContextPriority, RawTSpawnConfig},
 };
 
 use crate::{
     exported_func,
-    syscalls::types::{Cid, OptionalPtr, OptionalPtrMut, RequiredPtr, SyscallResult},
+    syscalls::types::{Cid, OptionalPtrMut, RequiredPtr, RequiredPtrMut, SyscallResult},
 };
 
 use super::{define_syscall, SyscallNum};
@@ -80,7 +77,7 @@ define_syscall! {
         /// Spawns a thread at the entry point `entry_point` with the config `config`
         ///
         /// - if `dest_cid` is not null it will be set to the spawned thread's ID (CID or TID)
-        syst_spawn_raw(entry_point: usize, config: RequiredPtr<TSpawnConfig>, dest_cid: OptionalPtrMut<Cid>)
+        syst_spawn_raw(entry_point: usize, config: RequiredPtr<RawTSpawnConfig>, dest_cid: OptionalPtrMut<Cid>)
     },
 }
 
@@ -98,23 +95,19 @@ exported_func! {
     /// - `dest_cid`: if not null, will be set to the thread ID of the spawned thread
     extern "C" fn syst_spawn(
         entry_point: usize,
-        argument_ptr: OptionalPtr<()>,
-        priority: Optional<ContextPriority>,
-        custom_stack_size: Optional<usize>,
+        argument_ptr: *const (),
+        priority: RawContextPriority,
+        custom_stack_size: Option<NonZero<usize>>,
         dest_cid: OptionalPtrMut<Cid>,
     ) -> SyscallResult {
-        let config = TSpawnConfig::new(
+        let mut config = RawTSpawnConfig::new(
             argument_ptr,
             priority.into(),
             None,
             custom_stack_size.into(),
         );
-        syscall!(
-            SyscallNum::SysTSpawn,
-            entry_point,
-            &config as *const _ as usize,
-            dest_cid as usize
-        )
+        let config = unsafe {RequiredPtr::new_unchecked(&raw mut config)};
+        syst_spawn_raw(entry_point, config, dest_cid)
     }
 }
 
@@ -130,8 +123,8 @@ exported_func! {
 /// - the thread ID of the spawned thread
 pub fn spawn3(
     entry_point: fn(thread_id: Cid) -> !,
-    priority: Option<ContextPriority>,
-    custom_stack_size: Option<usize>,
+    priority: RawContextPriority,
+    custom_stack_size: Option<NonZero<usize>>,
 ) -> Result<Cid, ErrorStatus> {
     spawn_inner(
         entry_point as usize,
@@ -156,8 +149,8 @@ pub fn spawn3(
 pub fn spawn2(
     entry_point: fn(thread_id: Cid, argument: usize) -> !,
     argument: usize,
-    priority: Option<ContextPriority>,
-    custom_stack_size: Option<usize>,
+    priority: RawContextPriority,
+    custom_stack_size: Option<NonZero<usize>>,
 ) -> Result<Cid, ErrorStatus> {
     spawn_inner(
         entry_point as usize,
@@ -181,8 +174,8 @@ pub fn spawn2(
 pub fn spawn<T>(
     entry_point: fn(thread_id: Cid, argument_ptr: &'static T) -> !,
     argument_ptr: &'static T,
-    priority: Option<ContextPriority>,
-    custom_stack_size: Option<usize>,
+    priority: RawContextPriority,
+    custom_stack_size: Option<NonZero<usize>>,
 ) -> Result<Cid, ErrorStatus> {
     spawn_inner(
         entry_point as usize,
@@ -196,17 +189,18 @@ pub fn spawn<T>(
 fn spawn_inner(
     entry_point: usize,
     argument_ptr: *const (),
-    priority: Option<ContextPriority>,
-    custom_stack_size: Option<usize>,
+    priority: RawContextPriority,
+    custom_stack_size: Option<NonZero<usize>>,
 ) -> Result<Cid, ErrorStatus> {
     let mut cid = 0;
+    let ptr = RequiredPtrMut::new(&raw mut cid).into();
     err_from_u16!(
         syst_spawn(
             entry_point,
             argument_ptr,
             priority.into(),
             custom_stack_size.into(),
-            &mut cid
+            ptr
         ),
         cid
     )

@@ -7,9 +7,9 @@ use crate::{
     exported_func,
     syscalls::{self},
 };
-use safa_abi::raw::{
-    processes::{AbiStructures, ProcessStdio},
-    Optional,
+use safa_abi::{
+    ffi::option::COption,
+    process::{AbiStructures, ProcessStdio},
 };
 
 use crate::Lazy;
@@ -63,21 +63,21 @@ static STDERR: Lazy<usize> = Lazy::new(|| {
 
 exported_func! {
     /// Returns the resource id of the stdout file descriptor (if available)
-    pub extern "C" fn systry_get_stdout() -> Optional<usize> {
+    pub extern "C" fn systry_get_stdout() -> COption<usize> {
         STDIO.stdout.clone()
     }
 }
 
 exported_func! {
     /// Returns the resource id of the stderr file descriptor (if available)
-    pub extern "C" fn systry_get_stderr() -> Optional<usize> {
+    pub extern "C" fn systry_get_stderr() -> COption<usize> {
         STDIO.stderr.clone()
     }
 }
 
 exported_func! {
     /// Returns the resource id of the stdin file descriptor (if available)
-    pub extern "C" fn systry_get_stdin() -> Optional<usize> {
+    pub extern "C" fn systry_get_stdin() -> COption<usize> {
         STDIO.stdin.clone()
     }
 }

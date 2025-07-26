@@ -2,7 +2,8 @@
 //! which internally uses the [`crate::syscalls::syssbrk`] syscall
 //! to allocate memory
 
-use crate::raw::{NonNullSlice, Optional};
+#[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
+use safa_abi::ffi::{option::OptZero, slice::Slice};
 
 use super::syscalls;
 use core::{alloc::GlobalAlloc, cell::UnsafeCell, ptr::NonNull};
@@ -188,14 +189,12 @@ pub static GLOBAL_SYSTEM_ALLOCATOR: GlobalSystemAllocator = GlobalSystemAllocato
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[unsafe(no_mangle)]
 /// Allocates an object sized `object_size` using [`GLOBAL_SYSTEM_ALLOCATOR`]
-pub extern "C" fn syscreate(object_size: usize) -> Optional<NonNullSlice<u8>> {
+pub extern "C" fn syscreate(object_size: usize) -> OptZero<Slice<u8>> {
     GLOBAL_SYSTEM_ALLOCATOR
         .allocate(object_size)
         .map(|mut x| unsafe {
             let x = x.as_mut();
-            let len = x.len();
-            let ptr = NonNull::new_unchecked(x.as_mut_ptr());
-            NonNullSlice::from_raw_parts(ptr, len)
+            Slice::from_raw_parts(x.as_mut_ptr(), x.len())
         })
         .into()
 }

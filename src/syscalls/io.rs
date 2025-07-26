@@ -1,9 +1,10 @@
 use safa_abi::{
     errors::ErrorStatus,
-    raw::io::{DirEntry, FileAttr},
+    ffi::slice::Slice,
+    fs::{DirEntry, FileAttr},
 };
 
-use crate::syscalls::types::{OptionalPtrMut, RequiredPtr, RequiredPtrMut, Ri};
+use crate::syscalls::types::{OptionalPtrMut, RequiredPtrMut, Ri};
 
 use super::{define_syscall, err_from_u16, SyscallNum};
 
@@ -36,7 +37,8 @@ define_syscall! {
 /// see [`sysdiriter_open`] for underlying syscall
 pub fn diriter_open(dir_ri: Ri) -> Result<Ri, ErrorStatus> {
     let mut dest_fd: usize = 0xAAAAAAAAAAAAAAAAusize;
-    err_from_u16!(sysdiriter_open(dir_ri, &raw mut dest_fd), dest_fd)
+    let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut dest_fd) };
+    err_from_u16!(sysdiriter_open(dir_ri, ptr), dest_fd)
 }
 
 #[inline]
@@ -45,10 +47,8 @@ pub fn diriter_open(dir_ri: Ri) -> Result<Ri, ErrorStatus> {
 /// see [`sysdiriter_next`] for underlying syscall
 pub fn diriter_next(dir_ri: Ri) -> Result<DirEntry, ErrorStatus> {
     let mut dest_direntry: DirEntry = unsafe { core::mem::zeroed() };
-    err_from_u16!(
-        sysdiriter_next(dir_ri, &raw mut dest_direntry),
-        dest_direntry
-    )
+    let ptr = RequiredPtrMut::new(&raw mut dest_direntry).into();
+    err_from_u16!(sysdiriter_next(dir_ri, ptr), dest_direntry)
 }
 
 // File related syscalls
@@ -57,7 +57,7 @@ define_syscall! {
         /// Writes `len` bytes from `buf` to the file with the resource id `fd` at offset `offset`
         ///
         /// if `dest_wrote` is not null, it will be set to the number of bytes written
-        syswrite(fd: Ri, offset: isize, buf: RequiredPtr<u8>, len: usize, dest_wrote: OptionalPtrMut<usize>)
+        syswrite(fd: Ri, offset: isize, buf: Slice<u8>, dest_wrote: OptionalPtrMut<usize>)
     },
     SyscallNum::SysTruncate => {
         /// Truncates the file with the resource id `fd` to `len` bytes
@@ -75,7 +75,7 @@ define_syscall! {
         /// Reads `len` bytes from the file with the resource id `fd` at offset `offset` into `buf`
         ///
         /// if `dest_read` is not null, it will be set to the number of bytes read
-        sysread(fd: Ri, offset: isize, buf: RequiredPtrMut<u8>, len: usize, dest_read: OptionalPtrMut<usize>)
+        sysread(fd: Ri, offset: isize, buf: Slice<u8>, dest_read: OptionalPtrMut<usize>)
     },
     SyscallNum::SysSync => {
         /// Syncs the resource with the resource id `fd`
@@ -88,10 +88,10 @@ define_syscall! {
 /// and returns the number of bytes written
 pub fn write(fd: Ri, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus> {
     let mut dest_wrote = 0;
-    err_from_u16!(
-        syswrite(fd, offset, buf.as_ptr(), buf.len(), &mut dest_wrote),
-        dest_wrote
-    )
+    let dest_wrote_ptr = RequiredPtrMut::new(&raw mut dest_wrote).into();
+    let slice = Slice::from_slice(buf);
+
+    err_from_u16!(syswrite(fd, offset, slice, dest_wrote_ptr), dest_wrote)
 }
 
 #[inline]
@@ -104,24 +104,25 @@ pub fn truncate(fd: Ri, len: usize) -> Result<(), ErrorStatus> {
 /// Gets the size of the file with the resource id `fd`
 pub fn fsize(fd: Ri) -> Result<usize, ErrorStatus> {
     let mut dest_size = 0;
-    err_from_u16!(sysfsize(fd, &raw mut dest_size), dest_size)
+    let ptr = RequiredPtrMut::new(&raw mut dest_size).into();
+    err_from_u16!(sysfsize(fd, ptr), dest_size)
 }
 
 #[inline]
 /// Gets the file attributes of the file with the resource id `fd`
 pub fn fattrs(fd: Ri) -> Result<FileAttr, ErrorStatus> {
     let mut attrs: FileAttr = unsafe { core::mem::zeroed() };
-    err_from_u16!(sysfattrs(fd, &raw mut attrs), attrs)
+    let ptr = RequiredPtrMut::new(&raw mut attrs).into();
+    err_from_u16!(sysfattrs(fd, ptr), attrs)
 }
 
 #[inline]
 /// Reads `buf.len()` bytes from the file with the resource id `fd` at offset `offset` into `buf`
 pub fn read(fd: Ri, offset: isize, buf: &mut [u8]) -> Result<Ri, ErrorStatus> {
     let mut dest_read = 0;
-    err_from_u16!(
-        sysread(fd, offset, buf.as_mut_ptr(), buf.len(), &mut dest_read),
-        dest_read
-    )
+    let dest_read_ptr = RequiredPtrMut::new(&raw mut dest_read).into();
+    let slice = Slice::from_slice(buf);
+    err_from_u16!(sysread(fd, offset, slice, dest_read_ptr), dest_read)
 }
 
 #[inline]

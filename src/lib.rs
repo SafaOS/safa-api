@@ -46,8 +46,8 @@ pub mod errors {
 
 pub mod alloc;
 pub mod process;
-pub mod raw;
 pub mod syscalls;
+pub use safa_abi::ffi;
 
 #[macro_export]
 macro_rules! exported_func {

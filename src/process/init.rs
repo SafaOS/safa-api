@@ -1,12 +1,17 @@
 //! contains api initialization functions, that should be called before using the api
 use core::ptr::NonNull;
 
+use safa_abi::{
+    ffi::{slice::Slice, str::Str},
+    process::AbiStructures,
+};
+
 use crate::{
     alloc::GLOBAL_SYSTEM_ALLOCATOR,
     exported_func,
+    process::env::RawEnv,
     syscalls::{self},
 };
-use safa_abi::raw::{processes::AbiStructures, NonNullSlice, RawSliceMut};
 
 use super::{
     args::{RawArgs, RAW_ARGS},
@@ -16,21 +21,17 @@ use super::{
 
 // Initialization
 
-fn init_args(args: RawSliceMut<NonNullSlice<u8>>) {
+fn init_args(args: Option<NonNull<[&'static str]>>) {
     unsafe {
-        let slice = args
-            .into_slice_mut()
-            .map(|inner| RawArgs::new(NonNull::new_unchecked(inner as *mut _)));
-        RAW_ARGS.init(slice)
+        let raw = RawArgs::new(args);
+        RAW_ARGS.init(raw)
     }
 }
 
-fn init_env(env: RawSliceMut<NonNullSlice<u8>>) {
+fn init_env(env: Option<NonNull<[&'static [u8]]>>) {
     unsafe {
-        let slice = env
-            .into_slice_mut()
-            .map(|inner| RawArgs::new(NonNull::new_unchecked(inner as *mut _)));
-        RAW_ENV.init(slice)
+        let raw = RawEnv::new(env);
+        RAW_ENV.init(raw)
     }
 }
 
@@ -40,13 +41,21 @@ exported_func! {
     ///
     /// use [`_c_api_init`] instead
     pub extern "C" fn sysapi_init(
-        args: RawSliceMut<NonNullSlice<u8>>,
-        env: RawSliceMut<NonNullSlice<u8>>,
+        args: Slice<Str>,
+        env: Slice<Slice<u8>>,
         task_abi_structures: AbiStructures,
     ) {
-        init_args(args);
-        init_env(env);
+        unsafe {
+        let args = args.try_into_str_slices_mut(|_| true).expect("invalid args passed to sysapi_init");
+        let args_ptr =  NonNull::new_unchecked(args as *mut [&'static str]) ;
+
+        let env = env.try_into_slices_ptr_mut(|_| true).expect("invalid env passed to sysapi_init");
+        let env_ptr =  NonNull::new_unchecked(env as *mut [&'static [u8]]) ;
+
+        init_args(Some(args_ptr));
+        init_env(Some(env_ptr));
         init_meta(task_abi_structures);
+        }
     }
 }
 
@@ -60,16 +69,20 @@ exported_func! {
     unsafe(no_mangle)
 )]
 pub unsafe extern "C" fn _c_api_init(
-    args: RawSliceMut<NonNullSlice<u8>>,
-    env: RawSliceMut<NonNullSlice<u8>>,
+    args: Slice<Str>,
+    env: Slice<Slice<u8>>,
     task_abi_structures: *const AbiStructures,
     main: extern "C" fn(argc: i32, argv: *const *const u8) -> i32,
 ) -> ! {
     sysapi_init(args, env, *task_abi_structures);
 
     // Convert SafaOS `_start` arguments to `main` arguments
-    fn c_main_args(args: RawSliceMut<NonNullSlice<u8>>) -> (i32, *const *const u8) {
-        let argv_slice = unsafe { args.into_slice_mut().unwrap_or_default() };
+    fn c_main_args(args: Slice<Str>) -> (i32, *const *const u8) {
+        let argv_slice = unsafe {
+            args.try_as_slice()
+                .expect("argv passed to _c_api_init are invalid")
+        };
+
         if argv_slice.is_empty() {
             return (0, core::ptr::null());
         }

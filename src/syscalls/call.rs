@@ -1,23 +1,87 @@
-//! This module exposes SafaOS's syscalls and their rust counterparts
-
-#[cfg(not(feature = "rustc-dep-of-std"))]
-extern crate alloc;
-
-pub(crate) mod call;
+use crate::syscalls::types::SyscallResult;
 
 use core::arch::asm;
-pub use safa_abi::syscalls::SyscallTable as SyscallNum;
 
-macro_rules! err_from_u16 {
-    ($result:expr) => {
-        $result.into_result()
-    };
-    ($result:expr, $ok:expr) => {
-        err_from_u16!($result).map(|()| $ok)
-    };
+/// Invokes a syscall with the given number and arguments
+/// Number must be of type [`SyscallNum`]
+/// Arguments must be of type [`usize`]
+/// returns a [`SyscallResult`]
+#[macro_export]
+macro_rules! syscall {
+    ($num: expr, $($arg: expr),*) => {{
+        #[allow(unused_imports)]
+        use $crate::syscalls::call::JoinTuples;
+        use $crate::syscalls::call::SyscallCaller;
+        #[allow(unused_imports)]
+        use $crate::syscalls::types::IntoSyscallArg;
+
+        let args = ();
+        $(
+            let args = args.join_tuple($arg.into_syscall_arg());
+        )*
+        SyscallCaller::<{ $num as u16 }, _>::new(args).call()
+    }};
 }
 
-pub(crate) use err_from_u16;
+pub(crate) use syscall;
+
+pub struct SyscallCaller<const NUM: u16, T> {
+    args: T,
+}
+
+impl<const NUM: u16, T> SyscallCaller<NUM, T> {
+    pub const fn new(args: T) -> Self {
+        Self { args }
+    }
+}
+
+impl<const NUM: u16> SyscallCaller<NUM, ()> {
+    #[inline(always)]
+    pub fn call(self) -> SyscallResult {
+        syscall0::<NUM>()
+    }
+}
+
+impl<const NUM: u16> SyscallCaller<NUM, (usize,)> {
+    #[inline(always)]
+    pub fn call(self) -> SyscallResult {
+        syscall1::<NUM>(self.args.0)
+    }
+}
+
+impl<const NUM: u16> SyscallCaller<NUM, (usize, usize)> {
+    #[inline(always)]
+    pub fn call(self) -> SyscallResult {
+        syscall2::<NUM>(self.args.0, self.args.1)
+    }
+}
+
+impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize)> {
+    #[inline(always)]
+    pub fn call(self) -> SyscallResult {
+        syscall3::<NUM>(self.args.0, self.args.1, self.args.2)
+    }
+}
+
+impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize, usize)> {
+    #[inline(always)]
+    pub fn call(self) -> SyscallResult {
+        syscall4::<NUM>(self.args.0, self.args.1, self.args.2, self.args.3)
+    }
+}
+
+impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize, usize, usize)> {
+    #[inline(always)]
+    pub fn call(self) -> SyscallResult {
+        syscall5::<NUM>(
+            self.args.0,
+            self.args.1,
+            self.args.2,
+            self.args.3,
+            self.args.4,
+        )
+    }
+}
 
 #[doc(hidden)]
 #[inline(always)]
@@ -187,59 +251,65 @@ pub fn syscall5<const NUM: u16>(
     }
 }
 
-pub(crate) use call::syscall;
+pub trait JoinTuples<JoinWith> {
+    type Output;
+    fn join_tuple(self, other: JoinWith) -> Self::Output;
+}
 
-macro_rules! define_syscall {
-    ($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident : $ty:ty),*) unreachable }) => {
-        $(#[$attrss])*
-        #[cfg_attr(
-            not(any(feature = "std", feature = "rustc-dep-of-std")),
-            unsafe(no_mangle)
-        )]
-        #[cfg_attr(any(feature = "std", feature = "rustc-dep-of-std"), inline(always))]
-        pub extern "C" fn $name($($arg: $ty),*) -> ! {
-            #[allow(unused_imports)]
-            use $crate::syscalls::types::IntoSyscallArg;
-            _ = $crate::syscalls::syscall!($num, $( $arg.into_syscall_arg() ),*);
-            unreachable!()
+macro_rules! impl_join_single {
+    ($($T:ident)*,$($O:ident)*) => {
+        impl<$($T,)* $($O,)*> JoinTuples<($($O,)*)> for ($($T,)*) {
+            type Output = ($($T,)* $($O,)*);
+            fn join_tuple(self, other: ($($O,)*) ) -> Self::Output {
+                #[allow(non_snake_case)]
+                let ($($T,)*) = self;
+                #[allow(non_snake_case)]
+                let ($($O,)*) = other;
+                ($($T,)* $($O,)*)
+            }
         }
     };
-    ($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident : $ty:ty),*) }) => {
-        $(#[$attrss])*
-        #[cfg_attr(
-            not(any(feature = "std", feature = "rustc-dep-of-std")),
-            unsafe(no_mangle)
-        )]
-        #[cfg_attr(any(feature = "std", feature = "rustc-dep-of-std"), inline(always))]
-        pub extern "C" fn $name($($arg: $ty),*) -> $crate::syscalls::types::SyscallResult {
-            #[allow(unused_imports)]
-            use $crate::syscalls::types::IntoSyscallArg;
-            let result = $crate::syscalls::syscall!($num, $( $arg ),*);
-            result
-        }
-    };
-    {$($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident: $ty:ty),*) $($modifier:tt)* }),* $(,)?} => {
-        $(define_syscall!($num => { $(#[$attrss])* $name($($arg: $ty),*) $($modifier)* });)*
+}
+macro_rules! impl_join {
+    ($($T:ident)*,$($O:ident)*) => {
+        impl_join_single!($($T)*,$($O)*);
+        impl_join_single!($($O)*,$($T)*);
     };
 }
 
-pub(crate) use define_syscall;
+macro_rules! impl_join_nothing {
+    ($($T:ident)*) => {
 
-/// FS Operations related syscalls (that takes a path) such as create, remove, open, rename and etc
-pub mod fs;
-/// I/O Operations related syscalls (that takes a resource) such as read, write, truncate, etc
-pub mod io;
-/// Syscalls and operations that don't fall into a specific category
-pub mod misc;
-/// (SysP) Process related syscalls and operations
-pub mod process;
-/// Syscalls and operations related to the current process
-pub mod process_misc;
-/// (SysR) Resources related syscalls and operations such as destroying resources, duplicating them, etc
-pub mod resources;
-/// (SysT) Thread related syscalls and operations
-pub mod thread;
+        impl<$($T,)*> JoinTuples<()> for ($($T,)*) {
+            type Output = ($($T,)*);
+            fn join_tuple(self, _other: ()) -> Self::Output {
+                self
+            }
+        }
 
-use types::SyscallResult;
-/// Contains documentation-only types for syscall arguments
-pub mod types;
+        impl<$($T,)*> JoinTuples<($($T,)*)> for () {
+            type Output = ($($T,)*);
+            fn join_tuple(self, other: ($($T,)*)) -> Self::Output {
+                _ = self;
+                other
+            }
+        }
+    };
+}
+
+// we only need to join up to 5 elements
+impl_join_nothing!(A);
+impl_join_single!(A, B);
+impl_join_nothing!(A B);
+impl_join_single!(A B, C D);
+// joining A, B, C
+impl_join!(A B, C);
+impl_join_nothing!(A B C);
+// ok we got A, B, C, joining A, B, C, D
+impl_join!(A B C, D);
+impl_join_nothing!(A B C D);
+// we got A, B, C, D, joining A, B, C, D, E == 5
+impl_join!(A B C D, E);
+impl_join_nothing!(A B C D E);
+// now joining A, B with C, D, E to get A, B, C, D, E == 5
+impl_join!(A B C, D E);

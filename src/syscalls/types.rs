@@ -1,13 +1,15 @@
 pub(crate) trait IntoSyscallArg {
-    fn into_syscall_arg(self) -> usize;
+    type RegResults;
+    fn into_syscall_arg(self) -> Self::RegResults;
 }
 
 macro_rules! impl_into_syscall_as {
     ($ty:ty) => {
         impl IntoSyscallArg for $ty {
+            type RegResults = (usize,);
             #[inline(always)]
-            fn into_syscall_arg(self) -> usize {
-                self as usize
+            fn into_syscall_arg(self) -> (usize,) {
+                (self as usize,)
             }
         }
     };
@@ -27,27 +29,80 @@ impl_into_syscall_as!(u128);
 impl_into_syscall_as!(i128);
 impl_into_syscall_as!(bool);
 
-impl<T> IntoSyscallArg for *const T {
+impl IntoSyscallArg for (usize,) {
+    type RegResults = (usize,);
+
     #[inline(always)]
-    fn into_syscall_arg(self) -> usize {
-        self as usize
+    fn into_syscall_arg(self) -> (usize,) {
+        self
+    }
+}
+
+impl<T> IntoSyscallArg for *const T {
+    type RegResults = (usize,);
+
+    #[inline(always)]
+    fn into_syscall_arg(self) -> (usize,) {
+        (self as usize,)
     }
 }
 
 impl<T> IntoSyscallArg for *mut T {
+    type RegResults = (usize,);
+
     #[inline(always)]
-    fn into_syscall_arg(self) -> usize {
-        self as usize
+    fn into_syscall_arg(self) -> (usize,) {
+        (self as usize,)
     }
 }
 
-impl IntoSyscallArg for safa_abi::raw::io::OpenOptions {
+impl IntoSyscallArg for safa_abi::fs::OpenOptions {
+    type RegResults = (usize,);
+
     #[inline(always)]
-    fn into_syscall_arg(self) -> usize {
+    fn into_syscall_arg(self) -> (usize,) {
         let bits: u8 = unsafe { core::mem::transmute(self) };
         bits.into_syscall_arg()
     }
 }
+
+impl<T> IntoSyscallArg for Slice<T> {
+    type RegResults = (usize, usize);
+
+    #[inline(always)]
+    fn into_syscall_arg(self) -> (usize, usize) {
+        (self.as_ptr() as usize, self.len())
+    }
+}
+
+impl IntoSyscallArg for Str {
+    type RegResults = (usize, usize);
+
+    #[inline(always)]
+    fn into_syscall_arg(self) -> (usize, usize) {
+        (self.as_ptr() as usize, self.len())
+    }
+}
+
+impl<T> IntoSyscallArg for FFINonNull<T> {
+    type RegResults = (usize,);
+    fn into_syscall_arg(self) -> Self::RegResults {
+        (self.as_ptr() as usize,)
+    }
+}
+
+impl<T: NotZeroable + IntoSyscallArg> IntoSyscallArg for OptZero<T> {
+    type RegResults = T::RegResults;
+    fn into_syscall_arg(self) -> Self::RegResults {
+        let inner = unsafe { self.into_inner_unchecked() };
+        inner.into_syscall_arg()
+    }
+}
+
+use safa_abi::ffi::option::OptZero;
+use safa_abi::ffi::{ptr::FFINonNull, slice::Slice, str::Str};
+
+use safa_abi::ffi::NotZeroable;
 
 use crate::errors::ErrorStatus;
 
@@ -57,7 +112,7 @@ use crate::errors::ErrorStatus;
 /// however the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()`
 ///
 /// this is typically for the syscall to return optional values
-pub type OptionalPtrMut<T> = *mut T;
+pub type OptionalPtrMut<T> = OptZero<RequiredPtrMut<T>>;
 
 /// A nullable imuttable pointer to `T`
 ///
@@ -65,48 +120,39 @@ pub type OptionalPtrMut<T> = *mut T;
 /// however the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()`
 ///
 /// this is typically for the syscall to return optional values
-pub type OptionalPtr<T> = *const T;
+pub type OptionalPtr<T> = OptZero<RequiredPtr<T>>;
 
 /// A muttable pointer to `T`
 ///
 /// the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()` or if it is null
 ///
 /// typically used for the syscall to return a value
-pub type RequiredPtrMut<T> = *mut T;
+pub type RequiredPtrMut<T> = FFINonNull<T>;
 
 /// An immuttable pointer to `T`
 ///
 /// the syscall will return [`ErrorStatus::InvalidPtr`] if it is not aligned to `align_of::<T>()` or if it is null
 ///
 /// typically used for the syscall to return a value
-pub type RequiredPtr<T> = *const T;
+pub type RequiredPtr<T> = FFINonNull<T>;
 
-/// An immuttable pointer to a byte array
-///
-/// the syscall will return [`ErrorStatus::InvalidPtr`] if it is null
-///
-/// the syscall will return [`ErrorStatus::InvalidStr`] if it is not valid utf-8
-///
-/// typically followed by a `len` parameter to specify the length of the string
-pub type StrPtr = RequiredPtr<u8>;
-
-/// A muttable pointer to a byte array
-///
-/// the syscall will return [`ErrorStatus::InvalidPtr`] if it is null
-///
-/// typically used for the syscall to return a string meaning that after the syscall is successful it should contain a valid utf-8 string
-///
-/// typically followed by a `len` parameter to specify the length of the string
-pub type StrPtrMut = RequiredPtrMut<u8>;
-
-/// An optional immuttable nullable pointer to a byte array
+/// An optional immuttable nullable utf8 byte slice
 ///
 /// the syscall will return [`ErrorStatus::InvalidStr`] if it is not null and is not valid utf-8
 ///
 /// typically followed by a `len` parameter to specify the length of the string
 ///
 /// can be null
-pub type OptionalStrPtr = OptionalPtr<u8>;
+pub type OptionalStr = OptZero<Str>;
+
+/// An optional muttable nullable utf8 byte slice
+///
+/// the syscall will return [`ErrorStatus::InvalidStr`] if it is not null and is not valid utf-8
+///
+/// typically followed by a `len` parameter to specify the length of the string
+///
+/// can be null
+pub type OptionalStrMut = OptZero<Str>;
 
 /// An opaque type that represents a syscall result
 /// the underlying type is a 16 bit unsigned integer, in which 0 is success and any other value is in error

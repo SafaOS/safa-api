@@ -33,6 +33,7 @@ define_syscall! {
 #[inline]
 pub fn uptime() -> u64 {
     let mut results: u64 = 0;
-    sysuptime(&mut results);
+    let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut results) };
+    sysuptime(ptr);
     results
 }

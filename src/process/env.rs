@@ -1,7 +1,7 @@
 //! contains functions related to environment variables,
 //! api must be initialized before using these functions, see [`super::init`]
 
-use core::{cell::UnsafeCell, ffi::CStr};
+use core::{cell::UnsafeCell, ffi::CStr, mem::MaybeUninit, ptr::NonNull};
 
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 extern crate alloc;
@@ -11,12 +11,11 @@ use std as alloc;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use safa_abi::raw::{NonNullSlice, Optional, RawSlice};
+use safa_abi::ffi::option::OptZero;
+use safa_abi::ffi::slice::Slice;
 
 use crate::Lazy;
 use alloc::ffi::CString;
-
-use super::args::RawArgsStatic;
 
 // Environment variables
 
@@ -95,11 +94,10 @@ impl EnvVars {
     /// Insert a raw slice of environment variables into the environment.
     /// # Safety
     /// This function is unsafe because any usage of [`RawSlice<T>`] is unsafe.
-    unsafe fn insert_raw(&mut self, raw: &[NonNullSlice<u8>]) {
+    unsafe fn insert_raw(&mut self, raw: &[&[u8]]) {
         self.env.reserve(raw.len());
 
         for slice in raw {
-            let slice = slice.into_slice_mut();
             let mut spilt = slice.splitn(2, |c| *c == b'=');
 
             let Some(key) = spilt.next() else {
@@ -118,7 +116,7 @@ impl EnvVars {
         self.size_hint = 0;
     }
 
-    fn duplicate(&self) -> (Box<[u8]>, Vec<RawSlice<u8>>) {
+    fn duplicate(&self) -> (Box<[u8]>, Vec<Slice<u8>>) {
         // buf must not reallocate so size_hint must be accurate
         // TODO: maybe rename `size_hint`?
         let mut buf: Vec<u8> = Vec::with_capacity(self.size_hint);
@@ -130,9 +128,7 @@ impl EnvVars {
 
         for (key, value) in &self.env {
             let ptr = unsafe { buf.as_mut_ptr().add(offset) };
-            slices.push(unsafe {
-                RawSlice::from_raw_parts(ptr, key.len() + 1 + value.count_bytes())
-            });
+            slices.push(unsafe { Slice::from_raw_parts(ptr, key.len() + 1 + value.count_bytes()) });
 
             buf[offset..offset + key.len()].copy_from_slice(key);
             offset += key.len();
@@ -149,8 +145,54 @@ impl EnvVars {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct RawEnv {
+    args: NonNull<[&'static [u8]]>,
+}
+
+impl RawEnv {
+    pub const fn new(args: Option<NonNull<[&'static [u8]]>>) -> Self {
+        Self {
+            args: match args {
+                Some(args) => args,
+                None => unsafe { NonNull::new_unchecked(&mut []) },
+            },
+        }
+    }
+
+    const unsafe fn into_slice(self) -> &'static [&'static [u8]] {
+        unsafe { self.args.as_ref() }
+    }
+}
+
+pub(super) struct RawEnvStatic(UnsafeCell<MaybeUninit<RawEnv>>);
+unsafe impl Sync for RawEnvStatic {}
+
+impl RawEnvStatic {
+    pub const fn new() -> Self {
+        Self(UnsafeCell::new(MaybeUninit::uninit()))
+    }
+
+    pub unsafe fn init(&self, env: RawEnv) {
+        unsafe {
+            self.0.get().write(MaybeUninit::new(env));
+        }
+    }
+
+    const unsafe fn get_unchecked(&self) -> &mut RawEnv {
+        (*self.0.get()).assume_init_mut()
+    }
+
+    pub const unsafe fn as_slice(&self) -> &'static [&'static [u8]] {
+        unsafe {
+            let raw = self.get_unchecked();
+            raw.into_slice()
+        }
+    }
+}
+
 // TODO: refactor all of this
-pub(super) static RAW_ENV: RawArgsStatic = RawArgsStatic::new();
+pub(super) static RAW_ENV: RawEnvStatic = RawEnvStatic::new();
 
 // Lazy always implements Send and Sync LOL
 static ENV: Lazy<UnsafeCell<EnvVars>> = Lazy::new(|| {
@@ -191,7 +233,7 @@ pub fn env_remove(key: &[u8]) {
 /// unsafe because it requires for the output to not be dropped before the child process is created.
 /// the first element in the tuple represents the raw environment variables, while the second element is a vector of pointers within the first element.
 #[inline]
-pub(crate) unsafe fn duplicate_env() -> (Box<[u8]>, Vec<RawSlice<u8>>) {
+pub(crate) unsafe fn duplicate_env() -> (Box<[u8]>, Vec<Slice<u8>>) {
     let env = unsafe { &*ENV.get() };
     env.duplicate()
 }
@@ -207,13 +249,15 @@ pub fn env_clear() {
     unsafe(no_mangle)
 )]
 /// Get an environment variable by key.
-pub extern "C" fn sysenv_get(key: RawSlice<u8>) -> Optional<RawSlice<u8>> {
+pub extern "C" fn sysenv_get(key: OptZero<Slice<u8>>) -> OptZero<Slice<u8>> {
     unsafe {
-        let Some(key) = key.into_slice() else {
-            return Optional::None;
+        let Some(key) = key.into_option() else {
+            return OptZero::none();
         };
 
-        env_get(key).map(|slice| RawSlice::from_slice(slice)).into()
+        env_get(key.as_slice_unchecked())
+            .map(|slice| Slice::from_slice(slice))
+            .into()
     }
 }
 
@@ -222,13 +266,16 @@ pub extern "C" fn sysenv_get(key: RawSlice<u8>) -> Optional<RawSlice<u8>> {
     unsafe(no_mangle)
 )]
 /// Set an environment variable by key.
-pub extern "C" fn sysenv_set(key: RawSlice<u8>, value: RawSlice<u8>) {
+pub extern "C" fn sysenv_set(key: Slice<u8>, value: OptZero<Slice<u8>>) {
     unsafe {
-        let Some(key) = key.into_slice() else {
-            return;
-        };
-        let value = if let Some(value) = value.into_slice() {
+        let key = key
+            .try_as_slice()
+            .expect("invalid key passed to sysenv_set");
+
+        let value = if let Some(value) = value.into_option() {
             value
+                .try_as_slice()
+                .expect("invalid value passed to sysenv_set")
         } else {
             &[]
         };
@@ -242,11 +289,11 @@ pub extern "C" fn sysenv_set(key: RawSlice<u8>, value: RawSlice<u8>) {
     unsafe(no_mangle)
 )]
 /// Remove an environment variable by key.
-pub extern "C" fn sysenv_remove(key: RawSlice<u8>) {
+pub extern "C" fn sysenv_remove(key: Slice<u8>) {
     unsafe {
-        let Some(key) = key.into_slice() else {
-            return;
-        };
+        let key = key
+            .try_as_slice()
+            .expect("invalid key passed to sysenv_remove");
 
         env_remove(key);
     }

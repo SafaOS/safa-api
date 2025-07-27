@@ -68,7 +68,7 @@ pub fn wait(cid: Cid) -> Result<(), ErrorStatus> {
 /// # Returns
 /// - Err(()) if duration as milliseconds is larger than usize::MAX
 pub fn sleep(duration: Duration) -> Result<(), ()> {
-    let ms: usize = duration.as_millis().try_into().map_err(|_| ())?;
+    let ms: usize = duration.as_millis() as usize;
     Ok(assert!(syst_sleep(ms).is_success()))
 }
 

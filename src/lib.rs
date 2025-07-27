@@ -48,6 +48,7 @@ pub mod alloc;
 pub mod process;
 pub mod sync;
 pub mod syscalls;
+pub use safa_abi as abi;
 pub use safa_abi::ffi;
 
 #[macro_export]

@@ -5,8 +5,10 @@
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 use safa_abi::ffi::{option::OptZero, slice::Slice};
 
+use crate::sync::locks::Mutex;
+
 use super::syscalls;
-use core::{alloc::GlobalAlloc, cell::UnsafeCell, ptr::NonNull};
+use core::{alloc::GlobalAlloc, ptr::NonNull};
 
 #[derive(Debug, Default)]
 struct Block {
@@ -142,22 +144,24 @@ unsafe impl Sync for SystemAllocator {}
 
 // FIXME: implement locks before multithreading
 pub struct GlobalSystemAllocator {
-    inner: UnsafeCell<SystemAllocator>,
+    inner: Mutex<SystemAllocator>,
 }
 
 impl GlobalSystemAllocator {
     const fn new() -> Self {
         Self {
-            inner: UnsafeCell::new(SystemAllocator::new()),
+            inner: Mutex::new(SystemAllocator::new()),
         }
     }
+
     #[inline]
     pub fn allocate(&self, size: usize) -> Option<NonNull<[u8]>> {
-        unsafe { (*self.inner.get()).allocate(size) }
+        self.inner.lock().allocate(size)
     }
+
     #[inline]
     pub unsafe fn deallocate(&self, ptr: NonNull<u8>) {
-        unsafe { (*self.inner.get()).deallocate(ptr) }
+        self.inner.lock().deallocate(ptr)
     }
 
     // TODO: implement grow and shrink

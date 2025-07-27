@@ -12,7 +12,7 @@ use safa_abi::{
     process::{AbiStructures, ProcessStdio},
 };
 
-use crate::Lazy;
+use crate::sync::cell::LazyCell;
 
 pub(super) struct StaticAbiStructures(UnsafeCell<MaybeUninit<AbiStructures>>);
 
@@ -33,8 +33,8 @@ unsafe impl Sync for StaticAbiStructures {}
 pub(super) static ABI_STRUCTURES: StaticAbiStructures =
     StaticAbiStructures(UnsafeCell::new(MaybeUninit::zeroed()));
 
-static STDIO: Lazy<ProcessStdio> = Lazy::new(|| unsafe { ABI_STRUCTURES.get().stdio });
-static STDIN: Lazy<usize> = Lazy::new(|| {
+static STDIO: LazyCell<ProcessStdio> = LazyCell::new(|| unsafe { ABI_STRUCTURES.get().stdio });
+static STDIN: LazyCell<usize> = LazyCell::new(|| {
     let stdin: Option<usize> = STDIO.stdin.into();
     if let Some(stdin) = stdin {
         stdin
@@ -43,7 +43,7 @@ static STDIN: Lazy<usize> = Lazy::new(|| {
     }
 });
 
-static STDOUT: Lazy<usize> = Lazy::new(|| {
+static STDOUT: LazyCell<usize> = LazyCell::new(|| {
     let stdout: Option<usize> = STDIO.stdout.into();
     if let Some(stdout) = stdout {
         stdout
@@ -52,7 +52,7 @@ static STDOUT: Lazy<usize> = Lazy::new(|| {
     }
 });
 
-static STDERR: Lazy<usize> = Lazy::new(|| {
+static STDERR: LazyCell<usize> = LazyCell::new(|| {
     let stderr: Option<usize> = STDIO.stderr.into();
     if let Some(stderr) = stderr {
         stderr
@@ -87,7 +87,7 @@ exported_func! {
     ///
     /// if there is no stdout file descriptor, it will fall back to `dev:/tty`
     pub extern "C" fn sysget_stdout() -> usize {
-        **STDOUT
+        *STDOUT
     }
 }
 
@@ -96,7 +96,7 @@ exported_func! {
     ///
     /// if there is no stderr file descriptor, it will fall back to `dev:/tty`
     pub extern "C" fn sysget_stderr() -> usize {
-        **STDERR
+        *STDERR
     }
 }
 
@@ -105,7 +105,7 @@ exported_func! {
     ///
     /// if there is no stdin file descriptor, it will fall back to `dev:/tty`
     pub extern "C" fn sysget_stdin() -> usize {
-        **STDIN
+        *STDIN
     }
 }
 

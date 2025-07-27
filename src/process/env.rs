@@ -14,8 +14,10 @@ use alloc::vec::Vec;
 use safa_abi::ffi::option::OptZero;
 use safa_abi::ffi::slice::Slice;
 
-use crate::Lazy;
 use alloc::ffi::CString;
+
+use crate::sync::cell::LazyCell;
+use crate::sync::locks::Mutex;
 
 // Environment variables
 
@@ -194,36 +196,35 @@ impl RawEnvStatic {
 // TODO: refactor all of this
 pub(super) static RAW_ENV: RawEnvStatic = RawEnvStatic::new();
 
-// Lazy always implements Send and Sync LOL
-static ENV: Lazy<UnsafeCell<EnvVars>> = Lazy::new(|| {
+// FIXME: use a RwLock
+static ENV: LazyCell<Mutex<EnvVars>> = LazyCell::new(|| {
     let mut env = EnvVars::new();
     unsafe { env.insert_raw(RAW_ENV.as_slice()) };
-    UnsafeCell::new(env)
+    Mutex::new(env)
 });
 
-// FIXME: unsafe after adding threads
 /// Gets all the environment variables in the current process
 #[inline]
-pub fn env_get_all() -> &'static [(Box<[u8]>, Box<CStr>)] {
-    let env = unsafe { &*ENV.get() };
-    &env.env
+pub fn env_get_all() -> Vec<(Box<[u8]>, Box<CStr>)> {
+    let env = ENV.lock();
+    env.env.clone()
 }
 
 #[inline]
-pub fn env_get(key: &[u8]) -> Option<&[u8]> {
-    let env = unsafe { &*ENV.get() };
-    env.get(key)
+pub fn env_get(key: &[u8]) -> Option<Box<[u8]>> {
+    let env = ENV.lock();
+    env.get(key).map(|v| v.to_vec().into_boxed_slice())
 }
 
 #[inline]
 pub fn env_set(key: &[u8], value: &[u8]) {
-    let env = unsafe { &mut *ENV.get() };
+    let mut env = ENV.lock();
     env.set(key, value);
 }
 
 #[inline]
 pub fn env_remove(key: &[u8]) {
-    let env = unsafe { &mut *ENV.get() };
+    let mut env = ENV.lock();
     env.remove(key);
 }
 
@@ -234,13 +235,13 @@ pub fn env_remove(key: &[u8]) {
 /// the first element in the tuple represents the raw environment variables, while the second element is a vector of pointers within the first element.
 #[inline]
 pub(crate) unsafe fn duplicate_env() -> (Box<[u8]>, Vec<Slice<u8>>) {
-    let env = unsafe { &*ENV.get() };
+    let env = ENV.lock();
     env.duplicate()
 }
 
 #[inline]
 pub fn env_clear() {
-    let env = unsafe { &mut *ENV.get() };
+    let mut env = ENV.lock();
     env.clear();
 }
 
@@ -248,14 +249,19 @@ pub fn env_clear() {
     not(any(feature = "std", feature = "rustc-dep-of-std")),
     unsafe(no_mangle)
 )]
+
 /// Get an environment variable by key.
-pub extern "C" fn sysenv_get(key: OptZero<Slice<u8>>) -> OptZero<Slice<u8>> {
+///
+/// # Safety
+/// unsafe because it returns a pointer to the environment variable, which may be invalid after the environment is modified.
+pub unsafe extern "C" fn sysenv_get(key: OptZero<Slice<u8>>) -> OptZero<Slice<u8>> {
     unsafe {
         let Some(key) = key.into_option() else {
             return OptZero::none();
         };
 
-        env_get(key.as_slice_unchecked())
+        ENV.lock()
+            .get(key.as_slice_unchecked())
             .map(|slice| Slice::from_slice(slice))
             .into()
     }

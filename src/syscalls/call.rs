@@ -23,7 +23,7 @@ macro_rules! syscall {
     }};
 }
 
-pub(crate) use syscall;
+pub use syscall;
 
 pub struct SyscallCaller<const NUM: u16, T> {
     args: T,

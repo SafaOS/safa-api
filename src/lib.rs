@@ -7,7 +7,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::fmt::Write;
+use core::fmt::{Arguments, Write};
 
 use crate::process::stdio::sysget_stderr;
 
@@ -79,20 +79,27 @@ impl Write for Stderr {
     }
 }
 
+#[doc(hidden)]
+pub fn _write_stderr(args: Arguments) {
+    _ = Stderr.write_fmt(args);
+}
+
+#[macro_export]
 #[allow(unused)]
 macro_rules! printerr {
     ($($arg:tt)*) => {
-        _ = Stderr.write_fmt(format_args!($($arg)*));
+        $crate::_write_stderr(format_args!($($arg)*));
     };
 }
 
+#[macro_export]
 #[allow(unused)]
 macro_rules! printerrln {
     () => {
-        printerr!("\n");
+        $crate::printerr!("\n");
     };
     ($($arg:tt)*) => {
-        printerr!("{}\n", format_args!($($arg)*));
+        $crate::printerr!("{}\n", format_args!($($arg)*));
     };
 }
 

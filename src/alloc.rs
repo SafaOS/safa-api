@@ -4,6 +4,7 @@
 
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 use safa_abi::ffi::{option::OptZero, slice::Slice};
+use safa_abi::mem::MemMapFlags;
 
 use crate::sync::locks::Mutex;
 
@@ -17,22 +18,53 @@ struct Block {
     data_len: usize,
 }
 
+fn sys_allocate(size_hint: usize) -> Option<(*mut u8, usize)> {
+    let page_count = size_hint.next_multiple_of(4096) / 4096;
+    let (_, s) = syscalls::mem::map(
+        core::ptr::null(),
+        page_count,
+        0,
+        None,
+        None,
+        MemMapFlags::WRITE,
+    )
+    .ok()?;
+
+    Some((s.as_ptr() as *mut u8, s.len()))
+}
+
 impl Block {
     /// Asks the system for a new memory Block with a size big enough to hold `data_len` bytes
-    pub fn create(data_len: usize) -> Option<NonNull<Self>> {
+    pub fn create(data_len: usize) -> Option<(NonNull<Self>, Option<NonNull<Block>>)> {
+        let data_len = data_len.next_multiple_of(size_of::<Block>());
         let size = data_len + size_of::<Block>();
         let size = size.next_multiple_of(align_of::<Block>());
         assert!(size <= isize::MAX as usize);
 
-        let ptr = get_data_break() as *mut Block;
-        syscalls::process_misc::sbrk(size as isize).ok()?;
+        let (alloc_ptr, alloc_size) = sys_allocate(size)?;
+        assert!(alloc_size >= size);
+
+        let ptr = alloc_ptr as *mut Block;
+
         unsafe {
             *ptr = Self {
                 free: true,
                 data_len: size - size_of::<Block>(),
                 ..Default::default()
             };
-            Some(NonNull::new_unchecked(ptr))
+
+            if alloc_size > size {
+                let extra_block_size = alloc_size - size;
+                let extra_block_ptr = alloc_ptr.add(size) as *mut Block;
+                *extra_block_ptr = Self {
+                    free: true,
+                    data_len: extra_block_size - size_of::<Block>(),
+                    ..Default::default()
+                };
+
+                (*ptr).next = Some(NonNull::new_unchecked(extra_block_ptr));
+            }
+            Some((NonNull::new_unchecked(ptr), (*ptr).next))
         }
     }
 
@@ -56,11 +88,6 @@ impl Block {
 
 pub struct SystemAllocator {
     head: Option<NonNull<Block>>,
-}
-
-fn get_data_break() -> *mut u8 {
-    // Should never fail
-    unsafe { syscalls::process_misc::sbrk(0).unwrap_unchecked() }
 }
 
 impl SystemAllocator {
@@ -106,17 +133,72 @@ impl SystemAllocator {
     /// or creates a new one if there is no enough space
     #[inline]
     fn find_block(&mut self, data_len: usize) -> Option<NonNull<Block>> {
+        let data_len = data_len.next_multiple_of(size_of::<Block>());
+
         if let Some(block) = self.try_find_block(data_len) {
+            let block_ptr = block.as_ptr();
+
+            unsafe {
+                let block_len = (*block_ptr).data_len;
+
+                // Spilt the Block
+                if block_len > data_len && (block_len - data_len) > size_of::<Block>() {
+                    let left_over = block_len - data_len;
+                    let new_block_len = left_over - size_of::<Block>();
+
+                    let new_block = block_ptr.add(1).byte_add(data_len);
+                    *new_block = Block {
+                        free: true,
+                        data_len: new_block_len,
+                        next: (*block_ptr).next.take(),
+                    };
+
+                    (*block_ptr).next = Some(NonNull::new_unchecked(new_block));
+                    (*block_ptr).data_len = data_len;
+                }
+            }
             Some(block)
         } else {
             unsafe {
-                let new_block = Block::create(data_len)?;
+                let (new_block, new_allocation_tail) = Block::create(data_len)?;
+                let set_next_of = new_allocation_tail.unwrap_or(new_block);
                 let stolen_head = self.head.take();
 
-                (*new_block.as_ptr()).next = stolen_head;
+                (*set_next_of.as_ptr()).next = stolen_head;
                 self.head = Some(new_block);
 
                 Some(new_block)
+            }
+        }
+    }
+
+    fn merge_blocks(&mut self) {
+        let mut current = self.head;
+        while let Some(block_ptr) = current {
+            unsafe {
+                let block = block_ptr.as_ptr();
+                if !(*block).free {
+                    current = (*block).next;
+                    continue;
+                }
+
+                let Some(next) = (*block).next else {
+                    return;
+                };
+
+                let next_ptr = next.as_ptr();
+                if !(*next_ptr).free {
+                    current = (*block).next;
+                    continue;
+                }
+
+                if block.add(1).byte_add((*block).data_len) == next_ptr {
+                    // consume the next block
+                    (*block).next = (*next_ptr).next;
+                    (*block).data_len += (*next_ptr).data_len + size_of::<Block>();
+                }
+
+                current = (*block).next;
             }
         }
     }
@@ -135,6 +217,8 @@ impl SystemAllocator {
             let block_ptr = Block::block_from_data_ptr(block_data).as_ptr();
             let block = &mut *block_ptr;
             block.free = true;
+
+            self.merge_blocks();
         }
     }
 }

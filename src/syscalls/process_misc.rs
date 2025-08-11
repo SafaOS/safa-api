@@ -6,16 +6,16 @@ use super::{define_syscall, err_from_u16, SyscallNum};
 extern crate alloc;
 
 define_syscall! {
-    SyscallNum::SysSbrk => {
+    SyscallNum::SysPSbrk => {
         /// Increases the range of the process's data break by `size` bytes and puts the new break pointer in `target_ptr`
         syssbrk(size: isize, target_ptr: OptZero<FFINonNull<*mut u8>>)
     },
-    SyscallNum::SysCHDir => {
+    SyscallNum::SysPCHDir => {
         /// Changes the current working directory to the path `buf` with length `buf_len`
         /// (expects given buffer to be utf-8)
         syschdir(buf: Str)
     },
-    SyscallNum::SysGetCWD => {
+    SyscallNum::SysPGetCWD => {
         /// Gets the current working directory and puts it in `cwd_buf` with length `cwd_buf_len`
         /// if `dest_len` is not null, it will be set to the length of the cwd
         /// if the cwd is too long to fit in `cwd_buf`, the syscall will return [`ErrorStatus::Generic`] (1)

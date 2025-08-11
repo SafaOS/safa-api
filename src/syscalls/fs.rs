@@ -8,7 +8,7 @@ use super::SyscallNum;
 use super::{define_syscall, err_from_u16};
 use crate::syscalls::types::{OptionalPtrMut, RequiredPtr, RequiredPtrMut, Ri};
 
-define_syscall!(SyscallNum::SysGetDirEntry => {
+define_syscall!(SyscallNum::SysFGetDirEntry => {
     /// Gets the directory entry for the path `path` and puts it in `dest_direntry`
     /// path must be valid utf-8
     /// if `dest_direntry` is not null, it will be set to the directory entry
@@ -24,30 +24,30 @@ pub fn getdirentry(path: &str) -> Result<DirEntry, ErrorStatus> {
 }
 
 define_syscall! {
-    SyscallNum::SysOpenAll => {
+    SyscallNum::SysFSOpenAll => {
         /// Opens the file with the path `path` and puts the resource id in `dest_fd`, with all permissions
         ///
         /// path must be valid utf-8
         sysopen_all(path: Str, dest_fd: RequiredPtr<Ri>)
     },
-    SyscallNum::SysOpen => {
+    SyscallNum::SysFSOpen => {
         /// Opens the file with the path `path` and puts the resource id in `dest_fd`, with a given mode (permissions and flags)
         ///
         /// path must be valid utf-8
         sysopen(path: Str, options: OpenOptions, dest_fd: RequiredPtrMut<Ri>)
     },
-    SyscallNum::SysCreate => {
+    SyscallNum::SysFSCreate => {
         /// Creates the file with the path `path`
         /// path must be valid utf-8
         syscreate_file(path: Str)
     },
-    SyscallNum::SysCreateDir => {
+    SyscallNum::SysFSCreateDir => {
         /// Creates the directory with the path `path`
         ///
         /// path must be valid utf-8
         syscreate_dir(path: Str)
     },
-    SyscallNum::SysRemovePath => {
+    SyscallNum::SysFSRemovePath => {
         /// Deletes "removes" a given path
         ///
         /// path must be valid utf-8

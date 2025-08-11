@@ -13,7 +13,7 @@ extern crate alloc;
 
 // Directory Iterator related syscalls
 define_syscall! {
-    SyscallNum::SysDirIterOpen =>
+    SyscallNum::SysFDirIterOpen =>
     {
         /// Opens a directory iterator for the directory with the resource id `dir_ri`
         sysdiriter_open(dir_ri: Ri, dest_ri: RequiredPtrMut<Ri>)
@@ -53,13 +53,13 @@ pub fn diriter_next(dir_ri: Ri) -> Result<DirEntry, ErrorStatus> {
 
 // File related syscalls
 define_syscall! {
-    SyscallNum::SysWrite => {
+    SyscallNum::SysIOWrite => {
         /// Writes `len` bytes from `buf` to the file with the resource id `fd` at offset `offset`
         ///
         /// if `dest_wrote` is not null, it will be set to the number of bytes written
         syswrite(fd: Ri, offset: isize, buf: Slice<u8>, dest_wrote: OptionalPtrMut<usize>)
     },
-    SyscallNum::SysTruncate => {
+    SyscallNum::SysIOTruncate => {
         /// Truncates the file with the resource id `fd` to `len` bytes
         systruncate(fd: Ri, len: usize)
     },
@@ -71,13 +71,13 @@ define_syscall! {
         /// Gets the file attributes of the file with the resource id `fd` and puts them in `dest_attrs`
         sysfattrs(fd: Ri, dest_attrs: OptionalPtrMut<FileAttr>)
     },
-    SyscallNum::SysRead => {
+    SyscallNum::SysIORead => {
         /// Reads `len` bytes from the file with the resource id `fd` at offset `offset` into `buf`
         ///
         /// if `dest_read` is not null, it will be set to the number of bytes read
         sysread(fd: Ri, offset: isize, buf: Slice<u8>, dest_read: OptionalPtrMut<usize>)
     },
-    SyscallNum::SysSync => {
+    SyscallNum::SysIOSync => {
         /// Syncs the resource with the resource id `fd`
         syssync(ri: Ri)
     },

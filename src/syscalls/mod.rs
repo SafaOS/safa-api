@@ -62,6 +62,8 @@ pub mod fs;
 pub mod futex;
 /// I/O Operations related syscalls (that takes a resource) such as read, write, truncate, etc
 pub mod io;
+/// (SysMem) Memory related syscalls
+pub mod mem;
 /// Syscalls and operations that don't fall into a specific category
 pub mod misc;
 /// (SysP) Process related syscalls and operations

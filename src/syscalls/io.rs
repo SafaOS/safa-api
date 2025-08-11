@@ -81,6 +81,15 @@ define_syscall! {
         /// Syncs the resource with the resource id `fd`
         syssync(ri: Ri)
     },
+    SyscallNum::SysIOCommand => {
+        /// Sends the command `cmd` to device on the resource `resource` taking an arg `arg`
+        sysio_command(ri: Ri, cmd: u16, arg: u64)
+    }
+}
+
+/// Sends the command `cmd` to device on the resource `ri` taking a u64 argument `arg`
+pub fn io_command(ri: Ri, cmd: u16, arg: u64) -> Result<(), ErrorStatus> {
+    err_from_u16!(sysio_command(ri, cmd, arg))
 }
 
 #[inline]

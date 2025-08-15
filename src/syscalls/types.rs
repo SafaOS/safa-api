@@ -166,7 +166,7 @@ impl SyscallResult {
     pub const fn into_result(self) -> Result<(), ErrorStatus> {
         match self.0 {
             0 => Ok(()),
-            x => unsafe { Err(core::mem::transmute(x)) },
+            x => Err(ErrorStatus::from_u16(x)),
         }
     }
 

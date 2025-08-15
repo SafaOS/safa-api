@@ -72,6 +72,8 @@ pub mod process;
 pub mod process_misc;
 /// (SysR) Resources related syscalls and operations such as destroying resources, duplicating them, etc
 pub mod resources;
+/// (SysSock) Unix Sockets related syscalls and operations
+pub mod sockets;
 /// (SysT) Thread related syscalls and operations
 pub mod thread;
 /// Contains documentation-only types for syscall arguments

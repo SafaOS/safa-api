@@ -42,10 +42,57 @@ pub mod errors {
     pub fn err_from_io_error_kind(io_err: std::io::ErrorKind) -> ErrorStatus {
         err_from_io_error_kind!(std::io::ErrorKind, io_err);
     }
+
+    #[cfg(any(feature = "rustc-dep-of-std", feature = "std"))]
+    #[cfg_attr(feature = "rustc-dep-of-std", macro_export)]
+    macro_rules! err_into_io_error_kind {
+        ($err: ident, $io_err_ty: path) => {
+            use $crate::errors::ErrorStatus::*;
+            use $io_err_ty as IoErrorKind;
+            return match $err {
+                NoSuchAFileOrDirectory => IoErrorKind::NotFound,
+                AlreadyExists => IoErrorKind::AlreadyExists,
+                MissingPermissions => IoErrorKind::PermissionDenied,
+                Busy => IoErrorKind::ResourceBusy,
+                NotADirectory => IoErrorKind::NotADirectory,
+                NotAFile => IoErrorKind::IsADirectory,
+                NotADevice => IoErrorKind::Unsupported,
+                InvalidPath | InvalidPid | InvalidTid | UnknownResource | UnsupportedResource
+                | InvalidOffset | InvalidPtr | StrTooLong | TooShort | InvalidSize => {
+                    IoErrorKind::InvalidInput
+                }
+                InvalidStr | Corrupted | NotExecutable | TypeMismatch => IoErrorKind::InvalidData,
+                OutOfMemory => IoErrorKind::OutOfMemory,
+                DirectoryNotEmpty => IoErrorKind::DirectoryNotEmpty,
+                OperationNotSupported | NotSupported | InvalidSyscall => IoErrorKind::Unsupported,
+                NotEnoughArguments | Generic | MMapError | Panic | Unknown
+                | ResourceCloneFailed => IoErrorKind::Other,
+                InvalidArgument | InvalidCommand => IoErrorKind::InvalidInput,
+                Timeout => IoErrorKind::TimedOut,
+                ConnectionClosed => IoErrorKind::ConnectionAborted,
+                ConnectionRefused => IoErrorKind::ConnectionRefused,
+                AddressNotFound => IoErrorKind::AddrNotAvailable,
+                WouldBlock => IoErrorKind::WouldBlock,
+            };
+        };
+    }
+
+    #[cfg(feature = "std")]
+    pub fn err_into_io_error_kind(err: ErrorStatus) -> std::io::ErrorKind {
+        err_into_io_error_kind!(err, std::io::ErrorKind);
+    }
+
+    #[cfg(feature = "std")]
+    pub fn into_io_error(err: ErrorStatus) -> std::io::Error {
+        let kind = err_into_io_error_kind(err);
+        std::io::Error::new(kind, err.as_str())
+    }
 }
 
 pub mod alloc;
 pub mod process;
+/// An interface over SafaOS's Unix Sockets
+pub mod sockets;
 pub mod sync;
 pub mod syscalls;
 pub use safa_abi as abi;

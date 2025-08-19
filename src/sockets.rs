@@ -99,13 +99,19 @@ pub struct UnixSockConnection {
 
 impl UnixSockConnection {
     /// Performs a read operation on this socket
-    pub fn read(&self, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
         syscalls::io::read(self.inner_ri, 0, buf)
     }
 
     /// Performs a write operation on this socket
-    pub fn write(&self, buf: &[u8]) -> Result<usize, ErrorStatus> {
+    pub fn write(&mut self, buf: &[u8]) -> Result<usize, ErrorStatus> {
         syscalls::io::write(self.inner_ri, 0, buf)
+    }
+
+    /// Set the ability for the socket to block to `can_block`
+    pub fn set_can_block(&mut self, can_block: bool) -> Result<(), ErrorStatus> {
+        const SET_BLOCKING: u16 = 0;
+        syscalls::io::io_command(self.inner_ri, SET_BLOCKING, can_block as u64)
     }
 
     /// The raw Resource ID of self
@@ -244,36 +250,19 @@ mod _std {
     use std::io::Read;
     use std::io::Write;
 
-    impl<'a> Read for &'a super::UnixSockConnection {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            super::UnixSockConnection::read(*self, buf).map_err(|e| crate::errors::into_io_error(e))
-        }
-    }
-
     impl Read for super::UnixSockConnection {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            (&mut &*self).read(buf)
-        }
-    }
-
-    impl<'a> Write for &'a super::UnixSockConnection {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            super::UnixSockConnection::write(*self, buf)
-                .map_err(|e| crate::errors::into_io_error(e))
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
+            super::UnixSockConnection::read(self, buf).map_err(|e| crate::errors::into_io_error(e))
         }
     }
 
     impl Write for super::UnixSockConnection {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            (&mut &*self).write(buf)
+            super::UnixSockConnection::write(self, buf).map_err(|e| crate::errors::into_io_error(e))
         }
 
         fn flush(&mut self) -> io::Result<()> {
-            (&mut &*self).flush()
+            Ok(())
         }
     }
 }

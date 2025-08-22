@@ -89,7 +89,7 @@ pub unsafe extern "C" fn _c_api_init(
 
         let bytes = (args.len() + 1) * size_of::<usize>();
 
-        let c_argv_bytes = GLOBAL_SYSTEM_ALLOCATOR.allocate(bytes).unwrap();
+        let c_argv_bytes = GLOBAL_SYSTEM_ALLOCATOR.allocate(bytes, 16).unwrap();
         let c_argv_slice = unsafe {
             core::slice::from_raw_parts_mut(c_argv_bytes.as_ptr() as *mut *const u8, args.len() + 1)
         };

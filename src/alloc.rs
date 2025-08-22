@@ -97,7 +97,9 @@ impl SystemAllocator {
 
     /// tries to find a block with enough space for `data_len` bytes
     #[inline]
-    fn try_find_block(&self, data_len: usize) -> Option<NonNull<Block>> {
+    fn try_find_block(&self, data_len: usize, alignment: usize) -> Option<NonNull<Block>> {
+        let alignment = alignment.next_multiple_of(align_of::<Block>());
+
         // To optimize the search for exact size we have to manipulate the data_len a bit
         let size = data_len + size_of::<Block>();
         let size = size.next_multiple_of(align_of::<Block>());
@@ -107,6 +109,10 @@ impl SystemAllocator {
         let mut best_block: Option<(NonNull<Block>, usize)> = None;
 
         while let Some(block_ptr) = current {
+            if !(block_ptr.as_ptr() as usize).is_multiple_of(alignment) {
+                continue;
+            }
+
             let block = unsafe { &*block_ptr.as_ptr() };
             if !block.free {
                 current = block.next;
@@ -132,10 +138,15 @@ impl SystemAllocator {
     /// finds a block with enough space for `data_len` bytes
     /// or creates a new one if there is no enough space
     #[inline]
-    fn find_block(&mut self, data_len: usize) -> Option<NonNull<Block>> {
+    fn find_block(&mut self, data_len: usize, alignment: usize) -> Option<NonNull<Block>> {
+        assert!(
+            alignment <= 4096,
+            "Max allowed alignment is Page size which is 4096 bytes"
+        );
+
         let data_len = data_len.next_multiple_of(size_of::<Block>());
 
-        if let Some(block) = self.try_find_block(data_len) {
+        if let Some(block) = self.try_find_block(data_len, alignment) {
             let block_ptr = block.as_ptr();
 
             unsafe {
@@ -203,8 +214,8 @@ impl SystemAllocator {
         }
     }
 
-    fn allocate(&mut self, size: usize) -> Option<NonNull<[u8]>> {
-        let block = self.find_block(size)?;
+    fn allocate(&mut self, size: usize, alignment: usize) -> Option<NonNull<[u8]>> {
+        let block = self.find_block(size, alignment)?;
         unsafe {
             let ptr = block.as_ptr();
             (*ptr).free = false;
@@ -239,8 +250,8 @@ impl GlobalSystemAllocator {
     }
 
     #[inline]
-    pub fn allocate(&self, size: usize) -> Option<NonNull<[u8]>> {
-        self.inner.lock().allocate(size)
+    pub fn allocate(&self, size: usize, alignment: usize) -> Option<NonNull<[u8]>> {
+        self.inner.lock().allocate(size, alignment)
     }
 
     #[inline]
@@ -256,7 +267,7 @@ unsafe impl Send for GlobalSystemAllocator {}
 
 unsafe impl GlobalAlloc for GlobalSystemAllocator {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        self.allocate(layout.size())
+        self.allocate(layout.size(), layout.align())
             .map(|x| x.as_ptr() as *mut u8)
             .unwrap_or(core::ptr::null_mut())
     }
@@ -277,9 +288,9 @@ pub static GLOBAL_SYSTEM_ALLOCATOR: GlobalSystemAllocator = GlobalSystemAllocato
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[unsafe(no_mangle)]
 /// Allocates an object sized `object_size` using [`GLOBAL_SYSTEM_ALLOCATOR`]
-pub extern "C" fn syscreate(object_size: usize) -> OptZero<Slice<u8>> {
+pub extern "C" fn syscreate(object_size: usize, object_align: usize) -> OptZero<Slice<u8>> {
     GLOBAL_SYSTEM_ALLOCATOR
-        .allocate(object_size)
+        .allocate(object_size, object_align)
         .map(|mut x| unsafe {
             let x = x.as_mut();
             Slice::from_raw_parts(x.as_mut_ptr(), x.len())

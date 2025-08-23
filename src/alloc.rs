@@ -16,6 +16,7 @@ struct Block {
     free: bool,
     next: Option<NonNull<Block>>,
     data_len: usize,
+    __padding: usize,
 }
 
 fn sys_allocate(size_hint: usize) -> Option<(*mut u8, usize)> {
@@ -109,13 +110,16 @@ impl SystemAllocator {
         let mut best_block: Option<(NonNull<Block>, usize)> = None;
 
         while let Some(block_ptr) = current {
-            if !(block_ptr.as_ptr() as usize).is_multiple_of(alignment) {
-                continue;
-            }
-
             let block = unsafe { &*block_ptr.as_ptr() };
             if !block.free {
                 current = block.next;
+                continue;
+            }
+
+            if unsafe {
+                !(Block::data_from_ptr(block).cast::<u8>().as_ptr() as usize)
+                    .is_multiple_of(alignment)
+            } {
                 continue;
             }
 
@@ -162,6 +166,7 @@ impl SystemAllocator {
                         free: true,
                         data_len: new_block_len,
                         next: (*block_ptr).next.take(),
+                        __padding: 0,
                     };
 
                     (*block_ptr).next = Some(NonNull::new_unchecked(new_block));

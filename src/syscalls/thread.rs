@@ -122,7 +122,7 @@ exported_func! {
 /// # Returns
 /// - the thread ID of the spawned thread
 pub fn spawn3(
-    entry_point: fn(thread_id: Cid) -> !,
+    entry_point: extern "C" fn(thread_id: Cid) -> !,
     priority: RawContextPriority,
     custom_stack_size: Option<NonZero<usize>>,
 ) -> Result<Cid, ErrorStatus> {
@@ -147,7 +147,7 @@ pub fn spawn3(
 /// # Returns
 /// - the thread ID of the spawned thread
 pub fn spawn2(
-    entry_point: fn(thread_id: Cid, argument: usize) -> !,
+    entry_point: extern "C" fn(thread_id: Cid, argument: usize) -> !,
     argument: usize,
     priority: RawContextPriority,
     custom_stack_size: Option<NonZero<usize>>,
@@ -172,7 +172,7 @@ pub fn spawn2(
 /// # Returns
 /// - the thread ID of the spawned thread
 pub fn spawn<T>(
-    entry_point: fn(thread_id: Cid, argument_ptr: &'static T) -> !,
+    entry_point: extern "C" fn(thread_id: Cid, argument_ptr: &'static T) -> !,
     argument_ptr: &'static T,
     priority: RawContextPriority,
     custom_stack_size: Option<NonZero<usize>>,

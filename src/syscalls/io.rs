@@ -84,6 +84,9 @@ define_syscall! {
     SyscallNum::SysIOCommand => {
         /// Sends the command `cmd` to device on the resource `resource` taking an arg `arg`
         sysio_command(ri: Ri, cmd: u16, arg: u64)
+    },
+    SyscallNum::SysVTTYAlloc => {
+        sysvtty_alloc(mother_ri: RequiredPtrMut<Ri>, child_ri: RequiredPtrMut<Ri>, _reserved_zero: usize)
     }
 }
 
@@ -138,4 +141,21 @@ pub fn read(fd: Ri, offset: isize, buf: &mut [u8]) -> Result<Ri, ErrorStatus> {
 /// Syncs the resource with the resource id `ri`
 pub fn sync(ri: Ri) -> Result<(), ErrorStatus> {
     err_from_u16!(syssync(ri))
+}
+
+#[inline]
+/// Allocates a new VTTY
+pub fn vtty_alloc() -> Result<(Ri, Ri), ErrorStatus> {
+    let mut mother = 0xAAAAAAAAAAAAAAAA;
+    let mut child = 0xAAAAAAAAAAAAAAAA;
+    unsafe {
+        err_from_u16!(
+            sysvtty_alloc(
+                RequiredPtrMut::new_unchecked(&mut mother),
+                RequiredPtrMut::new_unchecked(&mut child),
+                0
+            ),
+            (mother, child)
+        )
+    }
 }

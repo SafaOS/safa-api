@@ -137,12 +137,13 @@ exported_func! {
         let stdio = stdio.as_ref();
         let stdio_ptr = stdio.map(|m| unsafe {FFINonNull::new_unchecked(m as *const _ as *mut _)}).into();
 
-        let (_, mut env) = unsafe { crate::process::env::duplicate_env() };
+        let mut duplicate = crate::process::env::duplicate_env();
+        let duplicate_slices = duplicate.raw_slices_mut();
 
-        let env = unsafe {OptZero::some(Slice::from_raw_parts(env.as_mut_ptr(), env.len()))};
+        let env = unsafe { OptZero::some(Slice::from_raw_parts(duplicate_slices.as_mut_ptr(), duplicate_slices.len())) };
         let config = RawPSpawnConfig::new_from_raw(name, args, env, flags, stdio_ptr, priority, custom_stack_size);
 
-        let raw_config_ptr = unsafe {RequiredPtr::new_unchecked(&config as *const _ as *mut _) };
+        let raw_config_ptr = unsafe { RequiredPtr::new_unchecked(&config as *const _ as *mut _) };
         sysp_spawn_inner(path, raw_config_ptr, dest_pid)
     }
 }

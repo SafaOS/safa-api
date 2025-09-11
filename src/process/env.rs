@@ -21,18 +21,41 @@ use crate::sync::locks::Mutex;
 
 // Environment variables
 
+/// Represents the results of an environment duplication operation (see [`duplicate_env`])
+#[derive(Debug, Clone)]
+pub struct DuplicatedEnv {
+    _raw_data: Box<[u8]>,
+    slices_ref: Vec<Slice<u8>>,
+}
+
+impl DuplicatedEnv {
+    /// Returns a list of slices that represents offsets and len within the new env of the variables one by one
+    ///
+    /// beware the slices live as long as self...
+    pub const fn raw_slices(&self) -> &[Slice<u8>] {
+        self.slices_ref.as_slice()
+    }
+
+    /// Returns a list of slices that represents offsets and len within the new env of the variables one by one
+    ///
+    /// beware the slices live as long as self...
+    pub const fn raw_slices_mut(&mut self) -> &mut [Slice<u8>] {
+        self.slices_ref.as_mut_slice()
+    }
+}
+
 struct EnvVars {
     env: Vec<(Box<[u8]>, Box<CStr>)>,
     /// hints the size of the environment variables in bytes (key.length + value.length + 1 ('='))
     /// which can then be used to duplicate the environment variables
-    size_hint: usize,
+    raw_len: usize,
 }
 
 impl EnvVars {
     pub const fn new() -> Self {
         Self {
             env: Vec::new(),
-            size_hint: 0,
+            raw_len: 0,
         }
     }
 
@@ -49,29 +72,30 @@ impl EnvVars {
     /// This function is unsafe because it should only be used if there is no environment variable with the same key.
     /// otherwise use [`EnvVars::set`]
     #[inline(always)]
-    pub unsafe fn push(&mut self, key: &[u8], value: &[u8]) {
+    unsafe fn push(&mut self, key: &[u8], value: &[u8]) {
         let cstr = CString::new(value)
-            .unwrap_or_else(|_| CStr::from_bytes_until_nul(value).unwrap().into());
+            .unwrap_or_else(|_| CStr::from_bytes_until_nul(value).unwrap().into())
+            .into_boxed_c_str();
 
-        self.env
-            .push((key.to_vec().into_boxed_slice(), cstr.into_boxed_c_str()));
-
-        // + null + '='
-        self.size_hint += key.len() + value.len() + 2;
+        let impact = Self::len_change(key, &cstr);
+        self.env.push((key.to_vec().into_boxed_slice(), cstr));
+        self.raw_len += impact;
     }
 
     #[inline(always)]
     pub fn set(&mut self, key: &[u8], value: &[u8]) {
-        for (k, v) in &mut self.env {
+        for (k, curr_v) in &mut self.env {
             if &**k == key {
-                let old_len = v.count_bytes();
+                let old_impact = Self::len_change(key, curr_v);
 
                 let new_value = CString::new(value)
                     .unwrap_or_else(|_| CStr::from_bytes_until_nul(value).unwrap().into());
-                *v = new_value.into_boxed_c_str();
-                self.size_hint -= old_len + 1;
-                // + null
-                self.size_hint += value.len() + 1;
+                *curr_v = new_value.into_boxed_c_str();
+
+                let new_impact = Self::len_change(key, curr_v);
+
+                self.raw_len -= old_impact;
+                self.raw_len += new_impact;
                 return;
             }
         }
@@ -81,12 +105,17 @@ impl EnvVars {
         }
     }
 
+    // Returns the impact a key value pair will have on the [`Self::raw_len`] if added or removed.
+    const fn len_change(key: &[u8], value: &CStr) -> usize {
+        key.len() + 1 + value.count_bytes() + 1
+    }
+
     #[inline(always)]
     pub fn remove(&mut self, key: &[u8]) {
         for (i, (k, v)) in self.env.iter().enumerate() {
             if &**k == key {
+                self.raw_len -= Self::len_change(key, &v);
                 // order doesn't matter
-                self.size_hint -= key.len() + 1 + v.count_bytes();
                 self.env.swap_remove(i);
                 return;
             }
@@ -115,14 +144,12 @@ impl EnvVars {
 
     pub fn clear(&mut self) {
         self.env.clear();
-        self.size_hint = 0;
+        self.raw_len = 0;
     }
 
-    fn duplicate(&self) -> (Box<[u8]>, Vec<Slice<u8>>) {
-        // buf must not reallocate so size_hint must be accurate
-        // TODO: maybe rename `size_hint`?
-        let mut buf: Vec<u8> = Vec::with_capacity(self.size_hint);
-        unsafe { buf.set_len(buf.capacity()) };
+    fn duplicate(&self) -> DuplicatedEnv {
+        let mut buf: Vec<u8> = Vec::with_capacity(self.raw_len);
+        unsafe { buf.set_len(self.raw_len) };
         let mut buf = buf.into_boxed_slice();
         let mut offset = 0;
 
@@ -143,7 +170,10 @@ impl EnvVars {
             offset += value_len;
         }
 
-        (buf, slices)
+        DuplicatedEnv {
+            _raw_data: buf,
+            slices_ref: slices,
+        }
     }
 }
 
@@ -229,12 +259,8 @@ pub fn env_remove(key: &[u8]) {
 }
 
 /// Duplicate the environment variables so that they can be used in a child process by being passed to `_start`.
-///
-/// # Safety
-/// unsafe because it requires for the output to not be dropped before the child process is created.
-/// the first element in the tuple represents the raw environment variables, while the second element is a vector of pointers within the first element.
 #[inline]
-pub(crate) unsafe fn duplicate_env() -> (Box<[u8]>, Vec<Slice<u8>>) {
+pub(crate) fn duplicate_env() -> DuplicatedEnv {
     let env = ENV.lock();
     env.duplicate()
 }

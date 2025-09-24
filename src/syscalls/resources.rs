@@ -30,7 +30,7 @@ pub fn destroy_resource(ri: Ri) -> Result<(), ErrorStatus> {
 /// Duplicates the resource referred to by the resource id `ri`
 /// and returns the new resource id
 pub fn dup(ri: Ri) -> Result<Ri, ErrorStatus> {
-    let mut dest_ri = 0xAAAAAAAAAAAAAAAAusize;
+    let mut dest_ri = 0xAAAAAAAAAAAAAAAAusize as Ri;
     let ptr = unsafe { RequiredPtrMut::new_unchecked(&mut dest_ri) };
     err_from_u16!(sysr_dup(ri, ptr), dest_ri)
 }

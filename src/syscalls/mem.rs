@@ -45,13 +45,13 @@ pub fn map(
 
     let conf = RawMemMapConfig {
         resource_off: off,
-        resource_to_map: ri,
+        resource_to_map: ri as usize,
         guard_pages_count,
         page_count,
         addr_hint,
     };
 
-    let mut res_id_results = 0xAAAAAAAAAAAAAAAAusize;
+    let mut res_id_results = 0xAA_AA_AA_AA;
     let mut start_addr_results =
         unsafe { NonNull::new_unchecked(0xAAAAAAAAAAAAAAAAusize as *mut u8) };
     let (result_ri, result_start_addr) = unsafe {

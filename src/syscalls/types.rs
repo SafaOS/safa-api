@@ -183,4 +183,4 @@ pub type Cid = u32;
 
 /// A resource id
 /// this is a generic type that can be used to represent any resource (file, directory, device, directory iterator, etc.)
-pub type Ri = usize;
+pub type Ri = u32;

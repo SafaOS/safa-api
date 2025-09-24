@@ -5,7 +5,7 @@ use core::{cell::UnsafeCell, mem::MaybeUninit};
 
 use crate::{
     exported_func,
-    syscalls::{self},
+    syscalls::{self, types::Ri},
 };
 use safa_abi::{
     ffi::option::COption,
@@ -34,8 +34,8 @@ pub(super) static ABI_STRUCTURES: StaticAbiStructures =
     StaticAbiStructures(UnsafeCell::new(MaybeUninit::zeroed()));
 
 static STDIO: LazyCell<ProcessStdio> = LazyCell::new(|| unsafe { ABI_STRUCTURES.get().stdio });
-static STDIN: LazyCell<usize> = LazyCell::new(|| {
-    let stdin: Option<usize> = STDIO.stdin.into();
+static STDIN: LazyCell<Ri> = LazyCell::new(|| {
+    let stdin: Option<Ri> = STDIO.into_rust().1;
     if let Some(stdin) = stdin {
         stdin
     } else {
@@ -43,8 +43,8 @@ static STDIN: LazyCell<usize> = LazyCell::new(|| {
     }
 });
 
-static STDOUT: LazyCell<usize> = LazyCell::new(|| {
-    let stdout: Option<usize> = STDIO.stdout.into();
+static STDOUT: LazyCell<Ri> = LazyCell::new(|| {
+    let stdout: Option<Ri> = STDIO.into_rust().0;
     if let Some(stdout) = stdout {
         stdout
     } else {
@@ -52,8 +52,8 @@ static STDOUT: LazyCell<usize> = LazyCell::new(|| {
     }
 });
 
-static STDERR: LazyCell<usize> = LazyCell::new(|| {
-    let stderr: Option<usize> = STDIO.stderr.into();
+static STDERR: LazyCell<Ri> = LazyCell::new(|| {
+    let stderr: Option<Ri> = STDIO.into_rust().2;
     if let Some(stderr) = stderr {
         stderr
     } else {
@@ -63,22 +63,22 @@ static STDERR: LazyCell<usize> = LazyCell::new(|| {
 
 exported_func! {
     /// Returns the resource id of the stdout file descriptor (if available)
-    pub extern "C" fn systry_get_stdout() -> COption<usize> {
-        STDIO.stdout.clone()
+    pub extern "C" fn systry_get_stdout() -> COption<Ri> {
+        STDIO.into_rust().0.into()
     }
 }
 
 exported_func! {
     /// Returns the resource id of the stderr file descriptor (if available)
-    pub extern "C" fn systry_get_stderr() -> COption<usize> {
-        STDIO.stderr.clone()
+    pub extern "C" fn systry_get_stderr() -> COption<Ri> {
+        STDIO.into_rust().2.into()
     }
 }
 
 exported_func! {
     /// Returns the resource id of the stdin file descriptor (if available)
-    pub extern "C" fn systry_get_stdin() -> COption<usize> {
-        STDIO.stdin.clone()
+    pub extern "C" fn systry_get_stdin() -> COption<Ri> {
+        STDIO.into_rust().1.into()
     }
 }
 
@@ -86,7 +86,7 @@ exported_func! {
     /// Returns the resource id of the stdout file descriptor
     ///
     /// if there is no stdout file descriptor, it will fall back to `dev:/tty`
-    pub extern "C" fn sysget_stdout() -> usize {
+    pub extern "C" fn sysget_stdout() -> Ri {
         *STDOUT
     }
 }
@@ -95,7 +95,7 @@ exported_func! {
     /// Returns the resource id of the stderr file descriptor
     ///
     /// if there is no stderr file descriptor, it will fall back to `dev:/tty`
-    pub extern "C" fn sysget_stderr() -> usize {
+    pub extern "C" fn sysget_stderr() -> Ri {
         *STDERR
     }
 }
@@ -104,7 +104,7 @@ exported_func! {
     /// Returns the resource id of the stdin file descriptor
     ///
     /// if there is no stdin file descriptor, it will fall back to `dev:/tty`
-    pub extern "C" fn sysget_stdin() -> usize {
+    pub extern "C" fn sysget_stdin() -> Ri {
         *STDIN
     }
 }

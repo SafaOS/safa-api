@@ -36,7 +36,7 @@ define_syscall! {
 ///
 /// see [`sysdiriter_open`] for underlying syscall
 pub fn diriter_open(dir_ri: Ri) -> Result<Ri, ErrorStatus> {
-    let mut dest_fd: usize = 0xAAAAAAAAAAAAAAAAusize;
+    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize as Ri;
     let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut dest_fd) };
     err_from_u16!(sysdiriter_open(dir_ri, ptr), dest_fd)
 }
@@ -130,7 +130,7 @@ pub fn fattrs(fd: Ri) -> Result<FileAttr, ErrorStatus> {
 
 #[inline]
 /// Reads `buf.len()` bytes from the file with the resource id `fd` at offset `offset` into `buf`
-pub fn read(fd: Ri, offset: isize, buf: &mut [u8]) -> Result<Ri, ErrorStatus> {
+pub fn read(fd: Ri, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
     let mut dest_read = 0;
     let dest_read_ptr = RequiredPtrMut::new(&raw mut dest_read).into();
     let slice = Slice::from_slice(buf);
@@ -146,8 +146,8 @@ pub fn sync(ri: Ri) -> Result<(), ErrorStatus> {
 #[inline]
 /// Allocates a new VTTY
 pub fn vtty_alloc() -> Result<(Ri, Ri), ErrorStatus> {
-    let mut mother = 0xAAAAAAAAAAAAAAAA;
-    let mut child = 0xAAAAAAAAAAAAAAAA;
+    let mut mother = 0xAA_AA_AA_AA;
+    let mut child = 0xAA_AA_AA_AA;
     unsafe {
         err_from_u16!(
             sysvtty_alloc(

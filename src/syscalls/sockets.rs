@@ -83,7 +83,7 @@ define_syscall! {
 /// # Returns
 /// The Resource ID of the Socket Descriptor if successful
 pub fn create(domain: u8, flags: SockCreateFlags, protocol: u32) -> Result<Ri, ErrorStatus> {
-    let mut ri = 0xAAAAAAAAAAAAAAAA;
+    let mut ri = 0xAAAAAAAA;
     err_from_u16!(
         syssock_create(domain, flags, protocol, RequiredPtr::new(&mut ri).into()),
         ri
@@ -134,7 +134,7 @@ pub fn accept(
     addr: Option<&mut SockBindAddr>,
     addr_struct_size: Option<&mut usize>,
 ) -> Result<Ri, ErrorStatus> {
-    let mut ri = 0xAAAAAAAAAAAAAAAA;
+    let mut ri = 0xAAAAAAAA;
     err_from_u16!(
         syssock_accept(
             sock_resource,
@@ -170,7 +170,7 @@ pub fn connect(
     addr: &SockBindAddr,
     addr_struct_size: usize,
 ) -> Result<Ri, ErrorStatus> {
-    let mut ri = 0xAAAAAAAAAAAAAAAA;
+    let mut ri = 0xAA_AA_AA_AA;
     err_from_u16!(
         syssock_connect(
             sock_resource,

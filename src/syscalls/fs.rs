@@ -60,7 +60,7 @@ define_syscall! {
 ///
 /// see [`sysopen_all`] for underlying syscall
 pub fn open_all(path: &str) -> Result<Ri, ErrorStatus> {
-    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
+    let mut dest_fd = 0xAA_AA_AA_AA;
     let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut dest_fd) };
     err_from_u16!(sysopen_all(Str::from_str(path), ptr), dest_fd)
 }
@@ -70,7 +70,7 @@ pub fn open_all(path: &str) -> Result<Ri, ErrorStatus> {
 /// see [`sysopen`] for underlying syscall
 #[inline]
 pub fn open(path: &str, options: OpenOptions) -> Result<Ri, ErrorStatus> {
-    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize;
+    let mut dest_fd = 0xAA_AA_AA_AA;
     let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut dest_fd) };
     err_from_u16!(sysopen(Str::from_str(path), options, ptr), dest_fd)
 }

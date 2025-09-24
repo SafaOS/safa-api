@@ -1,7 +1,10 @@
+use core::time::Duration;
+
 use safa_abi::{
     errors::ErrorStatus,
     ffi::slice::Slice,
     fs::{DirEntry, FileAttr},
+    poll::PollEntry,
 };
 
 use crate::syscalls::types::{OptionalPtrMut, RequiredPtrMut, Ri};
@@ -87,7 +90,29 @@ define_syscall! {
     },
     SyscallNum::SysVTTYAlloc => {
         sysvtty_alloc(mother_ri: RequiredPtrMut<Ri>, child_ri: RequiredPtrMut<Ri>, _reserved_zero: usize)
+    },
+    SyscallNum::SysIOPoll => {
+        /// Given a set of resources, waits for any of them to become ready for I/O (with specified events), returns the events that occurred causing the thread to wake up.
+        /// # Arguments
+        /// * `entries` - A slice of [`PollEntry`] structures, each representing a resource to poll.
+        /// * `timeout` - The maximum time to wait for any resource to become ready, in milliseconds, if 0 returns immediately, if u64::MAX waits forever.
+        sysiopoll(entries: Slice<PollEntry>, timeout: u64)
     }
+}
+
+#[inline]
+/// Given a set of resources, waits for any of them to become ready for I/O (with specified events), returns the events that occurred causing the thread to wake up.
+/// # Arguments
+/// * `entries` - A slice of [`PollEntry`] structures, each representing a resource to poll.
+/// * `timeout_ms` - The maximum time to wait for any resource to become ready, in milliseconds, if None or [`Duration::MAX`] waits forever.
+pub fn poll_resources(
+    entries: &mut [PollEntry],
+    timeout_ms: Option<Duration>,
+) -> Result<(), ErrorStatus> {
+    err_from_u16!(sysiopoll(
+        Slice::from_slice_mut(entries),
+        timeout_ms.map(|m| m.as_millis() as u64).unwrap_or(u64::MAX)
+    ))
 }
 
 /// Sends the command `cmd` to device on the resource `ri` taking a u64 argument `arg`

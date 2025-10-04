@@ -99,10 +99,19 @@ impl<T: NotZeroable + IntoSyscallArg> IntoSyscallArg for OptZero<T> {
     }
 }
 
+impl IntoSyscallArg for SockDomain {
+    type RegResults = (usize,);
+    fn into_syscall_arg(self) -> Self::RegResults {
+        let u8: u8 = unsafe { core::mem::transmute(self) };
+        (u8 as usize,)
+    }
+}
+
 use safa_abi::ffi::option::OptZero;
 use safa_abi::ffi::{ptr::FFINonNull, slice::Slice, str::Str};
 
 use safa_abi::ffi::NotZeroable;
+use safa_abi::sockets::SockDomain;
 
 use crate::errors::ErrorStatus;
 

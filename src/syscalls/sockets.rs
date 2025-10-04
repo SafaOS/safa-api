@@ -1,7 +1,7 @@
 use safa_abi::{
     errors::ErrorStatus,
-    ffi::{option::OptZero, ptr::FFINonNull},
-    sockets::{SockBindAddr, SockCreateFlags},
+    ffi::{option::OptZero, ptr::FFINonNull, slice::Slice},
+    sockets::{SockBindAddr, SockCreateFlags, SockDomain},
 };
 
 use crate::syscalls::types::{IntoSyscallArg, OptionalPtrMut, RequiredPtr, Ri};
@@ -24,7 +24,7 @@ define_syscall! {
         /// - `flags` information about the Socket Type for example if it is a SEQPACKET or a STREAM socket, and whether or not it blocks
         /// - `protocol` ignored for now
         /// - `out_resource` The returned Resource ID of the Socket Descriptor
-        syssock_create(domain: u8, flags: SockCreateFlags, protocol: u32, out_resource: OptionalPtrMut<Ri>)
+        syssock_create(domain: SockDomain, flags: SockCreateFlags, protocol: u32, out_resource: OptionalPtrMut<Ri>)
     },
     SyscallNum::SysSockBind => {
         /// Binds a Server Socket to address pointed to by `addr` or upgrades a Generic Socket Descriptor to a Server Socket and then binds it to `addr`
@@ -71,6 +71,10 @@ define_syscall! {
         ///
         /// see [`syssock_accept`] for more information, the Client's connection works exactly like the Server's
         syssock_connect(sock_resource: Ri, addr: RequiredPtr<SockBindAddr>, addr_struct_size: usize, out_connection_resource: OptionalPtrMut<Ri>)
+    },
+    SyscallNum::SysSockSendTo => {
+        /// Given a socket descriptor, use it to send the data `data` to address `addr`.
+        syssock_sendto(sock_resource: Ri, data: Slice<u8>, addr: RequiredPtr<SockBindAddr>, addr_struct_size: usize)
     }
 }
 
@@ -82,7 +86,11 @@ define_syscall! {
 /// - `protocol` ignored for now
 /// # Returns
 /// The Resource ID of the Socket Descriptor if successful
-pub fn create(domain: u8, flags: SockCreateFlags, protocol: u32) -> Result<Ri, ErrorStatus> {
+pub fn create(
+    domain: SockDomain,
+    flags: SockCreateFlags,
+    protocol: u32,
+) -> Result<Ri, ErrorStatus> {
     let mut ri = 0xAAAAAAAA;
     err_from_u16!(
         syssock_create(domain, flags, protocol, RequiredPtr::new(&mut ri).into()),
@@ -180,4 +188,18 @@ pub fn connect(
         ),
         ri
     )
+}
+
+pub fn send_to(
+    sock_resource: Ri,
+    data: &[u8],
+    addr: &SockBindAddr,
+    addr_struct_size: usize,
+) -> Result<(), ErrorStatus> {
+    err_from_u16!(syssock_sendto(
+        sock_resource,
+        Slice::from_slice(data),
+        unsafe { RequiredPtr::new_unchecked(addr as *const _ as *mut _) },
+        addr_struct_size
+    ))
 }

@@ -1,9 +1,11 @@
-use core::usize;
+use core::{net::Ipv4Addr, usize};
 
 use safa_abi::{
     consts::MAX_NAME_LENGTH,
     errors::ErrorStatus,
-    sockets::{SockBindAbstractAddr, SockBindAddr, SockCreateFlags},
+    sockets::{
+        SockBindAbstractAddr, SockBindAddr, SockBindInetV4Addr, SockCreateFlags, SockDomain,
+    },
 };
 
 use crate::syscalls::{self, types::Ri};
@@ -17,6 +19,51 @@ pub enum SockKind {
 enum SockAddr {
     Abstract(([u8; MAX_NAME_LENGTH], usize)),
 }
+
+/// Represents a UDP Datagram connectionless socket
+pub struct UDPSocket {
+    sock_resource: Ri,
+}
+
+impl UDPSocket {
+    /// Create a new UDP socket
+    pub fn create() -> Result<Self, ErrorStatus> {
+        let sock_resource =
+            syscalls::sockets::create(SockDomain::INETV4, SockCreateFlags::SOCK_DGRAM, 0)?;
+        Ok(Self { sock_resource })
+    }
+
+    /// Listens for incoming requests at port [`port`] and filter by interface IP [`ipv4_addr`], use [`Ipv4Addr::UNSPECIFIED`] for any interface.
+    pub fn listen_at(&self, ipv4_addr: Ipv4Addr, port: u16) -> Result<(), ErrorStatus> {
+        let addr = SockBindInetV4Addr::new(port, ipv4_addr);
+        let addr_ref = unsafe { &*(&addr as *const SockBindInetV4Addr as *const SockBindAddr) };
+
+        syscalls::sockets::bind(
+            self.sock_resource,
+            addr_ref,
+            size_of::<SockBindInetV4Addr>(),
+        )
+    }
+
+    /// Sends payload [`payload`] to the IP [`target_ipv4_addr`] and the port [`target_port`].
+    pub fn send_to(
+        &self,
+        payload: &[u8],
+        target_ipv4_addr: Ipv4Addr,
+        target_port: u16,
+    ) -> Result<(), ErrorStatus> {
+        let addr = SockBindInetV4Addr::new(target_port, target_ipv4_addr);
+        let addr_ref = unsafe { &*(&addr as *const SockBindInetV4Addr as *const SockBindAddr) };
+
+        crate::syscalls::sockets::send_to(
+            self.sock_resource,
+            payload,
+            addr_ref,
+            size_of::<SockBindInetV4Addr>(),
+        )
+    }
+}
+
 /// Describes a Unix Socket Connection Builder
 pub struct UnixSockConnectionBuilder {
     addr: SockAddr,
@@ -74,7 +121,7 @@ impl UnixSockConnectionBuilder {
 
         let addr: &SockBindAddr = unsafe { core::mem::transmute(&addr) };
 
-        let socket_res = syscalls::sockets::create(0, flags, 0)?;
+        let socket_res = syscalls::sockets::create(SockDomain::LOCAL, flags, 0)?;
         let connection = syscalls::sockets::connect(socket_res, addr, addr_struct_size);
 
         let connection_ri = match connection {
@@ -181,7 +228,7 @@ impl UnixListenerBuilder {
             flags = flags | SockCreateFlags::SOCK_NON_BLOCKING;
         }
 
-        let socket_res = syscalls::sockets::create(0, flags, 0)?;
+        let socket_res = syscalls::sockets::create(SockDomain::LOCAL, flags, 0)?;
 
         let (addr, addr_struct_size) = match self.addr {
             SockAddr::Abstract((name, len)) => (

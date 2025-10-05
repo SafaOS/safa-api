@@ -70,7 +70,7 @@ define_syscall! {
         /// - `out_connection_resource`: (return value) the Client's end of the established connection if successful
         ///
         /// see [`syssock_accept`] for more information, the Client's connection works exactly like the Server's
-        syssock_connect(sock_resource: Ri, addr: RequiredPtr<SockBindAddr>, addr_struct_size: usize, out_connection_resource: OptionalPtrMut<Ri>)
+        syssock_connect(sock_resource: Ri, addr: RequiredPtr<SockBindAddr>, addr_struct_size: usize)
     },
     SyscallNum::SysSockSendTo => {
         /// Given a socket descriptor, use it to send the data `data` to address `addr`.
@@ -177,17 +177,12 @@ pub fn connect(
     sock_resource: Ri,
     addr: &SockBindAddr,
     addr_struct_size: usize,
-) -> Result<Ri, ErrorStatus> {
-    let mut ri = 0xAA_AA_AA_AA;
-    err_from_u16!(
-        syssock_connect(
-            sock_resource,
-            unsafe { RequiredPtr::new_unchecked(addr as *const _ as *mut _) },
-            addr_struct_size,
-            RequiredPtr::new(&mut ri).into()
-        ),
-        ri
-    )
+) -> Result<(), ErrorStatus> {
+    err_from_u16!(syssock_connect(
+        sock_resource,
+        unsafe { RequiredPtr::new_unchecked(addr as *const _ as *mut _) },
+        addr_struct_size,
+    ))
 }
 
 pub fn send_to(

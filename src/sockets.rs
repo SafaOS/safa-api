@@ -141,15 +141,13 @@ impl UnixSockConnectionBuilder {
         let connection = syscalls::sockets::connect(socket_res, addr, addr_struct_size);
 
         let connection_ri = match connection {
-            Ok(ri) => ri,
+            Ok(()) => socket_res,
             Err(e) => {
                 syscalls::resources::destroy_resource(socket_res)
                     .expect("failed to destroy a socket descriptor");
                 return Err(e);
             }
         };
-        syscalls::resources::destroy_resource(socket_res)
-            .expect("failed to destroy a socket descriptor");
         Ok(UnixSockConnection {
             inner_ri: connection_ri,
         })

@@ -33,8 +33,8 @@ impl UDPSocket {
         Ok(Self { sock_resource })
     }
 
-    /// Listens for incoming requests at port [`port`] and filter by interface IP [`ipv4_addr`], use [`Ipv4Addr::UNSPECIFIED`] for any interface.
-    pub fn listen_at(&self, ipv4_addr: Ipv4Addr, port: u16) -> Result<(), ErrorStatus> {
+    /// Binds the socket to the specified IP address and port, use [`Ipv4Addr::UNSPECIFIED`] to bind to all available interfaces.
+    pub fn bind_at(&self, ipv4_addr: Ipv4Addr, port: u16) -> Result<(), ErrorStatus> {
         let addr = SockBindInetV4Addr::new(port, ipv4_addr);
         let addr_ref = unsafe { &*(&addr as *const SockBindInetV4Addr as *const SockBindAddr) };
 
@@ -61,6 +61,22 @@ impl UDPSocket {
             addr_ref,
             size_of::<SockBindInetV4Addr>(),
         )
+    }
+
+    /// Set the ability for the socket to block to `can_block`
+    pub fn set_can_block(&mut self, can_block: bool) -> Result<(), ErrorStatus> {
+        const SET_BLOCKING: u16 = 0;
+        syscalls::io::io_command(self.sock_resource, SET_BLOCKING, can_block as u64)
+    }
+
+    /// Receives payload from the socket and stores it in [`buffer`], returns the amount of bytes received.
+    pub fn recv_from(&mut self, buffer: &mut [u8]) -> Result<usize, ErrorStatus> {
+        crate::syscalls::io::read(self.sock_resource, 0, buffer)
+    }
+
+    /// Returns the socket resource identifier.
+    pub const fn ri(&self) -> Ri {
+        self.sock_resource
     }
 }
 

@@ -130,17 +130,17 @@ impl SocketBuilder {
         }
     }
 
-    pub const fn set_non_blocking(mut self, non_blocking: bool) -> Self {
+    pub const fn set_non_blocking(&mut self, non_blocking: bool) -> &mut Self {
         self.can_block = !non_blocking;
         self
     }
 
-    pub const fn set_kind(mut self, kind: SocketKind) -> Self {
+    pub const fn set_kind(&mut self, kind: SocketKind) -> &mut Self {
         self.kind = kind;
         self
     }
 
-    pub const fn set_protocol(mut self, protocol: u32) -> Self {
+    pub const fn set_protocol(&mut self, protocol: u32) -> &mut Self {
         self.protocol = protocol;
         self
     }

@@ -4,9 +4,9 @@ use safa_abi::{
     fs::{DirEntry, OpenOptions},
 };
 
+use super::define_syscall;
 use super::SyscallNum;
-use super::{define_syscall, err_from_u16};
-use crate::syscalls::types::{OptionalPtrMut, RequiredPtr, RequiredPtrMut, Ri};
+use crate::syscalls::types::{OptionalPtrMut, RequiredPtrMut, Ri};
 
 define_syscall!(SyscallNum::SysFGetDirEntry => {
     /// Gets the directory entry for the path `path` and puts it in `dest_direntry`
@@ -20,7 +20,9 @@ pub fn getdirentry(path: &str) -> Result<DirEntry, ErrorStatus> {
     let mut dest_direntry: DirEntry = unsafe { core::mem::zeroed() };
     let ptr = RequiredPtrMut::new(&raw mut dest_direntry).into();
 
-    err_from_u16!(sysgetdirentry(Str::from_str(path), ptr), dest_direntry)
+    sysgetdirentry(Str::from_str(path), ptr)
+        .get()
+        .map(|()| dest_direntry)
 }
 
 define_syscall! {
@@ -28,13 +30,13 @@ define_syscall! {
         /// Opens the file with the path `path` and puts the resource id in `dest_fd`, with all permissions
         ///
         /// path must be valid utf-8
-        sysopen_all(path: Str, dest_fd: RequiredPtr<Ri>)
+        sysopen_all(path: Str) Ri
     },
     SyscallNum::SysFSOpen => {
         /// Opens the file with the path `path` and puts the resource id in `dest_fd`, with a given mode (permissions and flags)
         ///
         /// path must be valid utf-8
-        sysopen(path: Str, options: OpenOptions, dest_fd: RequiredPtrMut<Ri>)
+        sysopen(path: Str, options: OpenOptions) Ri
     },
     SyscallNum::SysFSCreate => {
         /// Creates the file with the path `path`
@@ -60,9 +62,7 @@ define_syscall! {
 ///
 /// see [`sysopen_all`] for underlying syscall
 pub fn open_all(path: &str) -> Result<Ri, ErrorStatus> {
-    let mut dest_fd = 0xAA_AA_AA_AA;
-    let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut dest_fd) };
-    err_from_u16!(sysopen_all(Str::from_str(path), ptr), dest_fd)
+    sysopen_all(Str::from_str(path)).get()
 }
 
 /// Opens the file with the path `path` with a given mode (permissions and flags), returns the resource id of the file descriptor
@@ -70,9 +70,7 @@ pub fn open_all(path: &str) -> Result<Ri, ErrorStatus> {
 /// see [`sysopen`] for underlying syscall
 #[inline]
 pub fn open(path: &str, options: OpenOptions) -> Result<Ri, ErrorStatus> {
-    let mut dest_fd = 0xAA_AA_AA_AA;
-    let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut dest_fd) };
-    err_from_u16!(sysopen(Str::from_str(path), options, ptr), dest_fd)
+    sysopen(Str::from_str(path), options).get()
 }
 
 #[inline]
@@ -80,7 +78,7 @@ pub fn open(path: &str, options: OpenOptions) -> Result<Ri, ErrorStatus> {
 ///
 /// see [`syscreate_file`] for underlying syscall
 pub fn create(path: &str) -> Result<(), ErrorStatus> {
-    err_from_u16!(syscreate_file(Str::from_str(path)))
+    syscreate_file(Str::from_str(path)).get()
 }
 
 #[inline]
@@ -88,7 +86,7 @@ pub fn create(path: &str) -> Result<(), ErrorStatus> {
 ///
 /// see [`syscreate_dir`] for underlying syscall
 pub fn createdir(path: &str) -> Result<(), ErrorStatus> {
-    err_from_u16!(syscreate_dir(Str::from_str(path)))
+    syscreate_dir(Str::from_str(path)).get()
 }
 
 #[inline]
@@ -96,5 +94,5 @@ pub fn createdir(path: &str) -> Result<(), ErrorStatus> {
 ///
 /// see [`sysremove_path`] for underlying syscall
 pub fn remove_path(path: &str) -> Result<(), ErrorStatus> {
-    err_from_u16!(sysremove_path(Str::from_str(path)))
+    sysremove_path(Str::from_str(path)).get()
 }

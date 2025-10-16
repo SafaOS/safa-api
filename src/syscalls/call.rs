@@ -1,4 +1,4 @@
-use crate::syscalls::types::SyscallResult;
+use crate::syscalls::types::{OkSyscallResult, SyscallResults};
 
 use core::arch::asm;
 
@@ -37,43 +37,43 @@ impl<const NUM: u16, T> SyscallCaller<NUM, T> {
 
 impl<const NUM: u16> SyscallCaller<NUM, ()> {
     #[inline(always)]
-    pub fn call(self) -> SyscallResult {
-        syscall0::<NUM>()
+    pub fn call<R: OkSyscallResult>(self) -> SyscallResults<R> {
+        syscall0::<NUM, R>()
     }
 }
 
 impl<const NUM: u16> SyscallCaller<NUM, (usize,)> {
     #[inline(always)]
-    pub fn call(self) -> SyscallResult {
-        syscall1::<NUM>(self.args.0)
+    pub fn call<R: OkSyscallResult>(self) -> SyscallResults<R> {
+        syscall1::<NUM, R>(self.args.0)
     }
 }
 
 impl<const NUM: u16> SyscallCaller<NUM, (usize, usize)> {
     #[inline(always)]
-    pub fn call(self) -> SyscallResult {
-        syscall2::<NUM>(self.args.0, self.args.1)
+    pub fn call<R: OkSyscallResult>(self) -> SyscallResults<R> {
+        syscall2::<NUM, R>(self.args.0, self.args.1)
     }
 }
 
 impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize)> {
     #[inline(always)]
-    pub fn call(self) -> SyscallResult {
-        syscall3::<NUM>(self.args.0, self.args.1, self.args.2)
+    pub fn call<R: OkSyscallResult>(self) -> SyscallResults<R> {
+        syscall3::<NUM, R>(self.args.0, self.args.1, self.args.2)
     }
 }
 
 impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize, usize)> {
     #[inline(always)]
-    pub fn call(self) -> SyscallResult {
-        syscall4::<NUM>(self.args.0, self.args.1, self.args.2, self.args.3)
+    pub fn call<R: OkSyscallResult>(self) -> SyscallResults<R> {
+        syscall4::<NUM, R>(self.args.0, self.args.1, self.args.2, self.args.3)
     }
 }
 
 impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize, usize, usize)> {
     #[inline(always)]
-    pub fn call(self) -> SyscallResult {
-        syscall5::<NUM>(
+    pub fn call<R: OkSyscallResult>(self) -> SyscallResults<R> {
+        syscall5::<NUM, R>(
             self.args.0,
             self.args.1,
             self.args.2,
@@ -83,10 +83,24 @@ impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize, usize, usize)> {
     }
 }
 
+impl<const NUM: u16> SyscallCaller<NUM, (usize, usize, usize, usize, usize, usize)> {
+    #[inline(always)]
+    pub fn call<R: OkSyscallResult>(self) -> SyscallResults<R> {
+        syscall6::<NUM, R>(
+            self.args.0,
+            self.args.1,
+            self.args.2,
+            self.args.3,
+            self.args.4,
+            self.args.5,
+        )
+    }
+}
+
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall0<const NUM: u16>() -> SyscallResult {
-    let result: u16;
+pub fn syscall0<const NUM: u16, R: OkSyscallResult>() -> SyscallResults<R> {
+    let result: usize;
     unsafe {
         #[cfg(target_arch = "x86_64")]
         asm!(
@@ -106,8 +120,8 @@ pub fn syscall0<const NUM: u16>() -> SyscallResult {
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall1<const NUM: u16>(arg1: usize) -> SyscallResult {
-    let result: u16;
+pub fn syscall1<const NUM: u16, R: OkSyscallResult>(arg1: usize) -> SyscallResults<R> {
+    let result: usize;
     unsafe {
         #[cfg(target_arch = "x86_64")]
         asm!(
@@ -129,8 +143,8 @@ pub fn syscall1<const NUM: u16>(arg1: usize) -> SyscallResult {
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall2<const NUM: u16>(arg1: usize, arg2: usize) -> SyscallResult {
-    let result: u16;
+pub fn syscall2<const NUM: u16, R: OkSyscallResult>(arg1: usize, arg2: usize) -> SyscallResults<R> {
+    let result: usize;
     unsafe {
         #[cfg(target_arch = "x86_64")]
         asm!(
@@ -154,8 +168,12 @@ pub fn syscall2<const NUM: u16>(arg1: usize, arg2: usize) -> SyscallResult {
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall3<const NUM: u16>(arg1: usize, arg2: usize, arg3: usize) -> SyscallResult {
-    let result: u16;
+pub fn syscall3<const NUM: u16, R: OkSyscallResult>(
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+) -> SyscallResults<R> {
+    let result: usize;
     unsafe {
         #[cfg(target_arch = "x86_64")]
         asm!(
@@ -181,13 +199,13 @@ pub fn syscall3<const NUM: u16>(arg1: usize, arg2: usize, arg3: usize) -> Syscal
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall4<const NUM: u16>(
+pub fn syscall4<const NUM: u16, R: OkSyscallResult>(
     arg1: usize,
     arg2: usize,
     arg3: usize,
     arg4: usize,
-) -> SyscallResult {
-    let result: u16;
+) -> SyscallResults<R> {
+    let result: usize;
     unsafe {
         #[cfg(target_arch = "x86_64")]
         asm!(
@@ -216,14 +234,14 @@ pub fn syscall4<const NUM: u16>(
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn syscall5<const NUM: u16>(
+pub fn syscall5<const NUM: u16, R: OkSyscallResult>(
     arg1: usize,
     arg2: usize,
     arg3: usize,
     arg4: usize,
     arg5: usize,
-) -> SyscallResult {
-    let result: u16;
+) -> SyscallResults<R> {
+    let result: usize;
     unsafe {
         #[cfg(target_arch = "x86_64")]
         asm!(
@@ -245,6 +263,46 @@ pub fn syscall5<const NUM: u16>(
             in("x2") arg3,
             in("x3") arg4,
             in("x4") arg5,
+            lateout("x0") result
+        );
+        core::mem::transmute(result)
+    }
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn syscall6<const NUM: u16, R: OkSyscallResult>(
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+    arg5: usize,
+    arg6: usize,
+) -> SyscallResults<R> {
+    let result: usize;
+    unsafe {
+        #[cfg(target_arch = "x86_64")]
+        asm!(
+            "int 0x80",
+            in("rax") NUM as usize,
+            in("rdi") arg1,
+            in("rsi") arg2,
+            in("rdx") arg3,
+            in("rcx") arg4,
+            in("r8") arg5,
+            in("r9") arg6,
+            lateout("rax") result,
+        );
+        #[cfg(target_arch = "aarch64")]
+        asm!(
+            "svc #{num}",
+            num = const NUM,
+            in("x0") arg1,
+            in("x1") arg2,
+            in("x2") arg3,
+            in("x3") arg4,
+            in("x4") arg5,
+            in("x5") arg6,
             lateout("x0") result
         );
         core::mem::transmute(result)
@@ -297,7 +355,7 @@ macro_rules! impl_join_nothing {
     };
 }
 
-// we only need to join up to 5 elements
+// we only need to join up to 6 elements
 impl_join_nothing!(A);
 impl_join_single!(A, B);
 impl_join_nothing!(A B);
@@ -311,5 +369,10 @@ impl_join_nothing!(A B C D);
 // we got A, B, C, D, joining A, B, C, D, E == 5
 impl_join!(A B C D, E);
 impl_join_nothing!(A B C D E);
+// we got A, B, C, D, E, joining A, B, C, D, E, F == 6
+impl_join!(A B C D E, F);
+impl_join_nothing!(A B C D E F);
+
 // now joining A, B with C, D, E to get A, B, C, D, E == 5
 impl_join!(A B C, D E);
+impl_join!(A B C D, E F);

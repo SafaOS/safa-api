@@ -7,7 +7,7 @@ use safa_abi::{
 
 use crate::{
     exported_func,
-    syscalls::types::{Cid, OptionalPtrMut, RequiredPtr, RequiredPtrMut, SyscallResult},
+    syscalls::types::{RequiredPtr, SyscallResults, Tid},
 };
 
 use super::{define_syscall, SyscallNum};
@@ -24,7 +24,7 @@ define_syscall! {
         ///
         /// # Returns
         /// - [`ErrorStatus::InvalidTid`] if thread doesn't exist at the time of wait
-        syst_wait(cid: Cid)
+        syst_wait(cid: Tid)
     },
     SyscallNum::SysTSleep => {
       /// Sleeps for N ms
@@ -49,7 +49,7 @@ pub fn exit(code: usize) -> ! {
 /// Switches to the next thread in the thread queue of the current CPU
 #[inline]
 pub fn yield_now() {
-    debug_assert!(sysyield().is_success())
+    debug_assert!(sysyield().get().is_ok())
 }
 
 #[inline]
@@ -58,8 +58,8 @@ pub fn yield_now() {
 /// # Returns
 ///
 /// - [`ErrorStatus::InvalidTid`] if the target thread doesn't exist at the time of wait
-pub fn wait(cid: Cid) -> Result<(), ErrorStatus> {
-    err_from_u16!(syst_wait(cid))
+pub fn wait(cid: Tid) -> Result<(), ErrorStatus> {
+    syst_wait(cid).get()
 }
 
 #[inline]
@@ -69,15 +69,15 @@ pub fn wait(cid: Cid) -> Result<(), ErrorStatus> {
 /// - Err(()) if duration as milliseconds is larger than usize::MAX
 pub fn sleep(duration: Duration) -> Result<(), ()> {
     let ms: usize = duration.as_millis() as usize;
-    Ok(assert!(syst_sleep(ms).is_success()))
+    Ok(assert!(syst_sleep(ms).get().is_ok()))
 }
 
 define_syscall! {
     SyscallNum::SysTSpawn => {
         /// Spawns a thread at the entry point `entry_point` with the config `config`
         ///
-        /// - if `dest_cid` is not null it will be set to the spawned thread's ID (CID or TID)
-        syst_spawn_raw(entry_point: usize, config: RequiredPtr<RawTSpawnConfig>, dest_cid: OptionalPtrMut<Cid>)
+        /// - Returns the spawned thread's ID (TID)
+        syst_spawn_raw(entry_point: usize, config: RequiredPtr<RawTSpawnConfig>) Tid
     },
 }
 
@@ -98,8 +98,7 @@ exported_func! {
         argument_ptr: *const (),
         priority: RawContextPriority,
         custom_stack_size: Option<NonZero<usize>>,
-        dest_cid: OptionalPtrMut<Cid>,
-    ) -> SyscallResult {
+    ) -> SyscallResults<Tid> {
         let mut config = RawTSpawnConfig::new(
             argument_ptr,
             priority.into(),
@@ -107,7 +106,7 @@ exported_func! {
             custom_stack_size.into(),
         );
         let config = unsafe {RequiredPtr::new_unchecked(&raw mut config)};
-        syst_spawn_raw(entry_point, config, dest_cid)
+        syst_spawn_raw(entry_point, config)
     }
 }
 
@@ -122,10 +121,10 @@ exported_func! {
 /// # Returns
 /// - the thread ID of the spawned thread
 pub fn spawn3(
-    entry_point: extern "C" fn(thread_id: Cid) -> !,
+    entry_point: extern "C" fn(thread_id: Tid) -> !,
     priority: RawContextPriority,
     custom_stack_size: Option<NonZero<usize>>,
-) -> Result<Cid, ErrorStatus> {
+) -> Result<Tid, ErrorStatus> {
     spawn_inner(
         entry_point as usize,
         core::ptr::null(),
@@ -147,11 +146,11 @@ pub fn spawn3(
 /// # Returns
 /// - the thread ID of the spawned thread
 pub fn spawn2(
-    entry_point: extern "C" fn(thread_id: Cid, argument: usize) -> !,
+    entry_point: extern "C" fn(thread_id: Tid, argument: usize) -> !,
     argument: usize,
     priority: RawContextPriority,
     custom_stack_size: Option<NonZero<usize>>,
-) -> Result<Cid, ErrorStatus> {
+) -> Result<Tid, ErrorStatus> {
     spawn_inner(
         entry_point as usize,
         argument as *const (),
@@ -172,11 +171,11 @@ pub fn spawn2(
 /// # Returns
 /// - the thread ID of the spawned thread
 pub fn spawn<T>(
-    entry_point: extern "C" fn(thread_id: Cid, argument_ptr: &'static T) -> !,
+    entry_point: extern "C" fn(thread_id: Tid, argument_ptr: &'static T) -> !,
     argument_ptr: &'static T,
     priority: RawContextPriority,
     custom_stack_size: Option<NonZero<usize>>,
-) -> Result<Cid, ErrorStatus> {
+) -> Result<Tid, ErrorStatus> {
     spawn_inner(
         entry_point as usize,
         argument_ptr as *const T as *const (),
@@ -191,17 +190,12 @@ fn spawn_inner(
     argument_ptr: *const (),
     priority: RawContextPriority,
     custom_stack_size: Option<NonZero<usize>>,
-) -> Result<Cid, ErrorStatus> {
-    let mut cid = 0;
-    let ptr = RequiredPtrMut::new(&raw mut cid).into();
-    err_from_u16!(
-        syst_spawn(
-            entry_point,
-            argument_ptr,
-            priority.into(),
-            custom_stack_size.into(),
-            ptr
-        ),
-        cid
+) -> Result<Tid, ErrorStatus> {
+    syst_spawn(
+        entry_point,
+        argument_ptr,
+        priority.into(),
+        custom_stack_size.into(),
     )
+    .get()
 }

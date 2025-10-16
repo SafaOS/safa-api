@@ -9,7 +9,7 @@ use safa_abi::{
 
 use crate::syscalls::types::{OptionalPtrMut, RequiredPtrMut, Ri};
 
-use super::{define_syscall, err_from_u16, SyscallNum};
+use super::{define_syscall, SyscallNum};
 
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
@@ -19,7 +19,7 @@ define_syscall! {
     SyscallNum::SysFDirIterOpen =>
     {
         /// Opens a directory iterator for the directory with the resource id `dir_ri`
-        sysdiriter_open(dir_ri: Ri, dest_ri: RequiredPtrMut<Ri>)
+        sysdiriter_open(dir_ri: Ri) Ri
     },
     SyscallNum::SysDirIterNext => {
         /// Gets the next directory entry from a directory iterator,
@@ -39,9 +39,7 @@ define_syscall! {
 ///
 /// see [`sysdiriter_open`] for underlying syscall
 pub fn diriter_open(dir_ri: Ri) -> Result<Ri, ErrorStatus> {
-    let mut dest_fd = 0xAAAAAAAAAAAAAAAAusize as Ri;
-    let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut dest_fd) };
-    err_from_u16!(sysdiriter_open(dir_ri, ptr), dest_fd)
+    sysdiriter_open(dir_ri).get()
 }
 
 #[inline]
@@ -51,7 +49,7 @@ pub fn diriter_open(dir_ri: Ri) -> Result<Ri, ErrorStatus> {
 pub fn diriter_next(dir_ri: Ri) -> Result<DirEntry, ErrorStatus> {
     let mut dest_direntry: DirEntry = unsafe { core::mem::zeroed() };
     let ptr = RequiredPtrMut::new(&raw mut dest_direntry).into();
-    err_from_u16!(sysdiriter_next(dir_ri, ptr), dest_direntry)
+    sysdiriter_next(dir_ri, ptr).get().map(|()| dest_direntry)
 }
 
 // File related syscalls
@@ -59,16 +57,16 @@ define_syscall! {
     SyscallNum::SysIOWrite => {
         /// Writes `len` bytes from `buf` to the file with the resource id `fd` at offset `offset`
         ///
-        /// if `dest_wrote` is not null, it will be set to the number of bytes written
-        syswrite(fd: Ri, offset: isize, buf: Slice<u8>, dest_wrote: OptionalPtrMut<usize>)
+        /// Returns the number of bytes written
+        syswrite(fd: Ri, offset: isize, buf: Slice<u8>) usize
     },
     SyscallNum::SysIOTruncate => {
         /// Truncates the file with the resource id `fd` to `len` bytes
         systruncate(fd: Ri, len: usize)
     },
     SyscallNum::SysFSize => {
-        /// Gets the size of the file with the resource id `fd` and puts it in `dest_size`
-        sysfsize(fd: Ri, dest_size: OptionalPtrMut<usize>)
+        /// Gets the size of the file with the resource id `fd` and returns it on success.
+        sysfsize(fd: Ri) usize
     },
     SyscallNum::SysFAttrs => {
         /// Gets the file attributes of the file with the resource id `fd` and puts them in `dest_attrs`
@@ -77,8 +75,8 @@ define_syscall! {
     SyscallNum::SysIORead => {
         /// Reads `len` bytes from the file with the resource id `fd` at offset `offset` into `buf`
         ///
-        /// if `dest_read` is not null, it will be set to the number of bytes read
-        sysread(fd: Ri, offset: isize, buf: Slice<u8>, dest_read: OptionalPtrMut<usize>)
+        /// Returns the number of bytes read.
+        sysread(fd: Ri, offset: isize, buf: Slice<u8>) usize
     },
     SyscallNum::SysIOSync => {
         /// Syncs the resource with the resource id `fd`
@@ -109,40 +107,36 @@ pub fn poll_resources(
     entries: &mut [PollEntry],
     timeout_ms: Option<Duration>,
 ) -> Result<(), ErrorStatus> {
-    err_from_u16!(sysiopoll(
+    sysiopoll(
         Slice::from_slice_mut(entries),
-        timeout_ms.map(|m| m.as_millis() as u64).unwrap_or(u64::MAX)
-    ))
+        timeout_ms.map(|m| m.as_millis() as u64).unwrap_or(u64::MAX),
+    )
+    .get()
 }
 
 /// Sends the command `cmd` to device on the resource `ri` taking a u64 argument `arg`
 pub fn io_command(ri: Ri, cmd: u16, arg: u64) -> Result<(), ErrorStatus> {
-    err_from_u16!(sysio_command(ri, cmd, arg))
+    sysio_command(ri, cmd, arg).get()
 }
 
 #[inline]
 /// Writes `buf.len()` bytes from `buf` to the file with the resource id `fd` at offset `offset`
 /// and returns the number of bytes written
 pub fn write(fd: Ri, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus> {
-    let mut dest_wrote = 0;
-    let dest_wrote_ptr = RequiredPtrMut::new(&raw mut dest_wrote).into();
     let slice = Slice::from_slice(buf);
-
-    err_from_u16!(syswrite(fd, offset, slice, dest_wrote_ptr), dest_wrote)
+    syswrite(fd, offset, slice).get()
 }
 
 #[inline]
 /// Truncates the file with the resource id `fd` to `len` bytes
 pub fn truncate(fd: Ri, len: usize) -> Result<(), ErrorStatus> {
-    err_from_u16!(systruncate(fd, len))
+    systruncate(fd, len).get()
 }
 
 #[inline]
 /// Gets the size of the file with the resource id `fd`
 pub fn fsize(fd: Ri) -> Result<usize, ErrorStatus> {
-    let mut dest_size = 0;
-    let ptr = RequiredPtrMut::new(&raw mut dest_size).into();
-    err_from_u16!(sysfsize(fd, ptr), dest_size)
+    sysfsize(fd).get()
 }
 
 #[inline]
@@ -150,22 +144,20 @@ pub fn fsize(fd: Ri) -> Result<usize, ErrorStatus> {
 pub fn fattrs(fd: Ri) -> Result<FileAttr, ErrorStatus> {
     let mut attrs: FileAttr = unsafe { core::mem::zeroed() };
     let ptr = RequiredPtrMut::new(&raw mut attrs).into();
-    err_from_u16!(sysfattrs(fd, ptr), attrs)
+    sysfattrs(fd, ptr).get().map(|()| attrs)
 }
 
 #[inline]
 /// Reads `buf.len()` bytes from the file with the resource id `fd` at offset `offset` into `buf`
 pub fn read(fd: Ri, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
-    let mut dest_read = 0;
-    let dest_read_ptr = RequiredPtrMut::new(&raw mut dest_read).into();
     let slice = Slice::from_slice(buf);
-    err_from_u16!(sysread(fd, offset, slice, dest_read_ptr), dest_read)
+    sysread(fd, offset, slice).get()
 }
 
 #[inline]
 /// Syncs the resource with the resource id `ri`
 pub fn sync(ri: Ri) -> Result<(), ErrorStatus> {
-    err_from_u16!(syssync(ri))
+    syssync(ri).get()
 }
 
 #[inline]
@@ -174,13 +166,12 @@ pub fn vtty_alloc() -> Result<(Ri, Ri), ErrorStatus> {
     let mut mother = 0xAA_AA_AA_AA;
     let mut child = 0xAA_AA_AA_AA;
     unsafe {
-        err_from_u16!(
-            sysvtty_alloc(
-                RequiredPtrMut::new_unchecked(&mut mother),
-                RequiredPtrMut::new_unchecked(&mut child),
-                0
-            ),
-            (mother, child)
+        sysvtty_alloc(
+            RequiredPtrMut::new_unchecked(&mut mother),
+            RequiredPtrMut::new_unchecked(&mut child),
+            0,
         )
+        .get()
+        .map(|()| (mother, child))
     }
 }

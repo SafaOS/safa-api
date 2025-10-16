@@ -66,13 +66,15 @@ pub mod errors {
                 DirectoryNotEmpty => IoErrorKind::DirectoryNotEmpty,
                 OperationNotSupported | NotSupported | InvalidSyscall => IoErrorKind::Unsupported,
                 NotEnoughArguments | Generic | MMapError | Panic | Unknown
-                | ResourceCloneFailed => IoErrorKind::Other,
+                | ResourceCloneFailed | NotBound => IoErrorKind::Other,
                 InvalidArgument | InvalidCommand => IoErrorKind::InvalidInput,
                 Timeout => IoErrorKind::TimedOut,
                 ConnectionClosed => IoErrorKind::ConnectionAborted,
                 ConnectionRefused => IoErrorKind::ConnectionRefused,
                 AddressNotFound => IoErrorKind::AddrNotAvailable,
                 WouldBlock => IoErrorKind::WouldBlock,
+                ForceTerminated => IoErrorKind::Interrupted,
+                AddressAlreadyInUse => IoErrorKind::AddrInUse,
             };
         };
     }

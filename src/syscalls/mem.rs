@@ -18,7 +18,7 @@ impl IntoSyscallArg for MemMapFlags {
 define_syscall! {
     SyscallNum::SysMemMap => {
         /// See [`SyscallNum::SysMemMap`]
-        sysmem_map(memmap_config: RequiredPtr<RawMemMapConfig>, flags: MemMapFlags, out_res_id: OptionalPtrMut<Ri>, out_start_addr: OptionalPtrMut<NonNull<u8>>)
+        sysmem_map(memmap_config: RequiredPtr<RawMemMapConfig>, flags: MemMapFlags, out_res_id: OptionalPtrMut<Ri>) NonNull<u8>
     }
 }
 
@@ -52,19 +52,15 @@ pub fn map(
     };
 
     let mut res_id_results = 0xAA_AA_AA_AA;
-    let mut start_addr_results =
-        unsafe { NonNull::new_unchecked(0xAAAAAAAAAAAAAAAAusize as *mut u8) };
-    let (result_ri, result_start_addr) = unsafe {
-        err_from_u16!(
-            sysmem_map(
-                RequiredPtr::new_unchecked(&raw const conf as *mut _),
-                flags,
-                RequiredPtr::new(&raw mut res_id_results).into(),
-                RequiredPtr::new(&raw mut start_addr_results).into()
-            ),
-            (res_id_results, start_addr_results)
-        )?
+    let result_start_addr = unsafe {
+        sysmem_map(
+            RequiredPtr::new_unchecked(&raw const conf as *mut _),
+            flags,
+            RequiredPtr::new(&raw mut res_id_results).into(),
+        )
+        .get()?
     };
+    let result_ri = res_id_results;
 
     // each Page is 4096 bytes
     let len = page_count * 4096;
@@ -98,8 +94,9 @@ define_syscall! {
         /// * `page_count` - The number of pages to allocate for the shared memory descriptor.
         /// * `flags` - The flags to use when creating and opening the shared memory descriptor.
         /// * `out_shm_key` - A pointer to a [`ShmKey`] that will be filled with the key of the created shared memory descriptor.
-        /// * `out_resource_id` - An optional pointer to a [`Ri`] that will be filled with the resource ID of the created shared memory descriptor, as if a call to [`sysmem_shm_open`] was made.
-        sysmem_shm_create(page_count: usize, flags: ShmFlags, out_shm_key: RequiredPtrMut<ShmKey>, out_resource_id: OptionalPtrMut<Ri>)
+        /// # Returns
+        /// * On Ok: The resource ID of the created shared memory descriptor, as if a call to [`sysmem_shm_open`] was made on the `out_shm_key`.
+        sysmem_shm_create(page_count: usize, flags: ShmFlags, out_shm_key: RequiredPtrMut<ShmKey>) Ri
     },
     SyscallNum::SysMemShmOpen => {
         /// Creates a Resource that can be [`sysmem_map`]ped to a Shared Memory Descriptor,
@@ -110,8 +107,9 @@ define_syscall! {
         /// # Arguments
         /// * `shm_key` - The key of the shared memory descriptor to open.
         /// * `flags` - The flags to use when opening the shared memory descriptor.
-        /// * `out_resource_id` - A pointer to a [`Ri`] that will be filled with the resource ID of the opened shared memory descriptor.
-        sysmem_shm_open(shm_key: ShmKey, flags: ShmFlags, out_resource_id: RequiredPtrMut<Ri>)
+        /// # Returns
+        /// * On Ok: The resource ID of the opened shared memory descriptor.
+        sysmem_shm_open(shm_key: ShmKey, flags: ShmFlags) Ri
     },
 }
 
@@ -131,17 +129,14 @@ define_syscall! {
 /// * `Err(ErrorStatus)` - An error.
 pub fn shm_create(page_count: usize, flags: ShmFlags) -> Result<(ShmKey, Ri), ErrorStatus> {
     let mut shm_key = ShmKey::default();
-    let mut resource_id = Ri::default();
     unsafe {
-        err_from_u16!(
-            sysmem_shm_create(
-                page_count,
-                flags,
-                RequiredPtrMut::new_unchecked(&mut shm_key),
-                RequiredPtrMut::new(&mut resource_id).into()
-            ),
-            (shm_key, resource_id)
+        sysmem_shm_create(
+            page_count,
+            flags,
+            RequiredPtrMut::new_unchecked(&mut shm_key),
         )
+        .get()
+        .map(|resource_id| (shm_key, resource_id))
     }
 }
 
@@ -157,15 +152,5 @@ pub fn shm_create(page_count: usize, flags: ShmFlags) -> Result<(ShmKey, Ri), Er
 /// * `Ok(Ri)` - The resource ID of the opened shared memory descriptor.
 /// * `Err(ErrorStatus)` - An error.
 pub fn shm_open(shm_key: ShmKey, flags: ShmFlags) -> Result<Ri, ErrorStatus> {
-    let mut resource_id = Ri::default();
-    unsafe {
-        err_from_u16!(
-            sysmem_shm_open(
-                shm_key,
-                flags,
-                RequiredPtrMut::new_unchecked(&mut resource_id)
-            ),
-            resource_id
-        )
-    }
+    sysmem_shm_open(shm_key, flags).get()
 }

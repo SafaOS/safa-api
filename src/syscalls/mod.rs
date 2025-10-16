@@ -7,17 +7,6 @@ pub(crate) mod call;
 
 pub use safa_abi::syscalls::SyscallTable as SyscallNum;
 
-macro_rules! err_from_u16 {
-    ($result:expr) => {
-        $result.into_result()
-    };
-    ($result:expr, $ok:expr) => {
-        err_from_u16!($result).map(|()| $ok)
-    };
-}
-
-pub(crate) use err_from_u16;
-
 pub use call::syscall;
 
 macro_rules! define_syscall {
@@ -31,18 +20,18 @@ macro_rules! define_syscall {
         pub extern "C" fn $name($($arg: $ty),*) -> ! {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
-            _ = $crate::syscalls::syscall!($num, $( $arg.into_syscall_arg() ),*);
+            let _: $crate::syscalls::types::SyscallResults<core::convert::Infallible> = $crate::syscalls::syscall!($num, $( $arg.into_syscall_arg() ),*);
             unreachable!()
         }
     };
-    ($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident : $ty:ty),*) }) => {
+    ($num:path => { $(#[$attrss:meta])* $name:ident ($($arg:ident : $ty:ty),*) $($return_ty:ty)? }) => {
         $(#[$attrss])*
         #[cfg_attr(
             not(any(feature = "std", feature = "rustc-dep-of-std")),
             unsafe(no_mangle)
         )]
         #[cfg_attr(any(feature = "std", feature = "rustc-dep-of-std"), inline(always))]
-        pub extern "C" fn $name($($arg: $ty),*) -> $crate::syscalls::types::SyscallResult {
+        pub extern "C" fn $name($($arg: $ty),*) -> $crate::syscalls::types::SyscallResults$(<$return_ty>)? {
             #[allow(unused_imports)]
             use $crate::syscalls::types::IntoSyscallArg;
             let result = $crate::syscalls::syscall!($num, $( $arg ),*);

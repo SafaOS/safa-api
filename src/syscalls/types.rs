@@ -1,3 +1,4 @@
+// ==================== ARGS ========================
 pub(crate) trait IntoSyscallArg {
     type RegResults;
     fn into_syscall_arg(self) -> Self::RegResults;
@@ -107,6 +108,63 @@ impl IntoSyscallArg for SockDomain {
     }
 }
 
+// ==================== Return ========================
+
+pub trait OkSyscallResult {
+    fn from_usize(value: usize) -> Self;
+}
+
+impl OkSyscallResult for Infallible {
+    fn from_usize(value: usize) -> Self {
+        unreachable!("Syscall shouldn't return anything, returned: {value}")
+    }
+}
+
+impl OkSyscallResult for () {
+    fn from_usize(value: usize) -> Self {
+        _ = value;
+    }
+}
+
+impl OkSyscallResult for usize {
+    fn from_usize(value: usize) -> Self {
+        value
+    }
+}
+
+impl OkSyscallResult for u32 {
+    fn from_usize(value: usize) -> Self {
+        value as u32
+    }
+}
+
+impl<T> OkSyscallResult for NonNull<T> {
+    fn from_usize(value: usize) -> Self {
+        NonNull::new(value as *mut T).expect("Syscall shouldn't return a null pointer")
+    }
+}
+
+use core::convert::Infallible;
+use core::marker::PhantomData;
+use core::ptr::NonNull;
+use safa_abi::errors::SysResult;
+
+/// An opaque type that represents a syscall result
+/// the underlying type is a usize signed integer, in which 0..=isize::MAX is success and any negative value is in error
+/// represented by the -[`ErrorStatus`] enum
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct SyscallResults<T: OkSyscallResult = ()> {
+    inner: SysResult,
+    _marker: PhantomData<T>,
+}
+
+impl<T: OkSyscallResult> SyscallResults<T> {
+    pub fn get(self) -> Result<T, ErrorStatus> {
+        self.inner.into_result().map(|ok| T::from_usize(ok))
+    }
+}
+
 use safa_abi::ffi::option::OptZero;
 use safa_abi::ffi::{ptr::FFINonNull, slice::Slice, str::Str};
 
@@ -163,32 +221,10 @@ pub type OptionalStr = OptZero<Str>;
 /// can be null
 pub type OptionalStrMut = OptZero<Str>;
 
-/// An opaque type that represents a syscall result
-/// the underlying type is a 16 bit unsigned integer, in which 0 is success and any other value is in error
-/// represented by the [`ErrorStatus`] enum
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct SyscallResult(u16);
-
-impl SyscallResult {
-    #[inline(always)]
-    pub const fn into_result(self) -> Result<(), ErrorStatus> {
-        match self.0 {
-            0 => Ok(()),
-            x => Err(ErrorStatus::from_u16(x)),
-        }
-    }
-
-    #[inline(always)]
-    pub const fn is_success(self) -> bool {
-        self.0 == 0
-    }
-}
-
 /// A process ID
 pub type Pid = u32;
 /// A thread ID
-pub type Cid = u32;
+pub type Tid = u32;
 
 /// A resource id
 /// this is a generic type that can be used to represent any resource (file, directory, device, directory iterator, etc.)

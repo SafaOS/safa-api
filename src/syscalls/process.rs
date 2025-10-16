@@ -15,7 +15,7 @@ use safa_abi::{
 use crate::{
     exported_func,
     process::stdio::{systry_get_stderr, systry_get_stdin, systry_get_stdout},
-    syscalls::types::{OptionalPtrMut, Pid, RequiredPtr, RequiredPtrMut, Ri, SyscallResult},
+    syscalls::types::{OptionalPtrMut, Pid, RequiredPtr, RequiredPtrMut, Ri, SyscallResults},
 };
 
 use super::{define_syscall, SyscallNum};
@@ -50,7 +50,7 @@ define_syscall! {
       sysp_try_cleanup(pid: Pid, dest_exit_code: OptionalPtrMut<usize>)
     },
     SyscallNum::SysPSpawn => {
-        sysp_spawn_inner(path: Str, raw_config: RequiredPtr<RawPSpawnConfig>, dest_pid: OptionalPtrMut<Pid>)
+        sysp_spawn_inner(path: Str, raw_config: RequiredPtr<RawPSpawnConfig>) Pid
     }
 }
 
@@ -72,7 +72,7 @@ pub fn exit(code: usize) -> ! {
 pub fn wait(pid: Pid) -> Result<usize, ErrorStatus> {
     let mut dest_exit_code = 0;
     let ptr = RequiredPtrMut::new(&mut dest_exit_code).into();
-    err_from_u16!(sysp_wait(pid, ptr), dest_exit_code)
+    sysp_wait(pid, ptr).get().map(|()| dest_exit_code)
 }
 #[inline]
 /// Attempts to cleanup the process with pid `pid` and returns it's exit status on success
@@ -84,7 +84,7 @@ pub fn wait(pid: Pid) -> Result<usize, ErrorStatus> {
 pub fn try_cleanup(pid: Pid) -> Result<Option<usize>, ErrorStatus> {
     let mut dest_exit_code = 0;
     let ptr = RequiredPtrMut::new(&mut dest_exit_code).into();
-    let results = err_from_u16!(sysp_try_cleanup(pid, ptr), dest_exit_code);
+    let results = sysp_try_cleanup(pid, ptr).get().map(|()| dest_exit_code);
 
     match results {
         Ok(results) => Ok(Some(results)),
@@ -117,8 +117,7 @@ exported_func! {
         stdout: COption<Ri>,
         stderr: COption<Ri>,
         custom_stack_size: OptZero<ShouldNotBeZero<usize>>,
-        dest_pid: OptionalPtrMut<Pid>,
-    ) -> SyscallResult {
+    ) -> SyscallResults<Pid> {
         let (stdin, stdout, stderr): (Option<_>, Option<_>, Option<_>) =
             (stdin.into(), stdout.into(), stderr.into());
 
@@ -144,7 +143,7 @@ exported_func! {
         let config = RawPSpawnConfig::new_from_raw(name, args, env, flags, stdio_ptr, priority, custom_stack_size);
 
         let raw_config_ptr = unsafe { RequiredPtr::new_unchecked(&config as *const _ as *mut _) };
-        sysp_spawn_inner(path, raw_config_ptr, dest_pid)
+        sysp_spawn_inner(path, raw_config_ptr)
     }
 }
 
@@ -169,31 +168,25 @@ pub unsafe fn unsafe_spawn(
     stderr: Option<Ri>,
     custom_stack_size: Option<NonZero<usize>>,
 ) -> Result<Pid, ErrorStatus> {
-    let mut pid = 0;
-    let pid_ptr = RequiredPtrMut::new(&mut pid).into();
-
     let name = name.map(|s| Str::from_str(s)).into();
     let path = Str::from_str(path);
     let args = unsafe { OptZero::some(Slice::from_str_slices_mut(args as *mut [*mut str])) };
 
-    err_from_u16!(
-        sysp_spawn(
-            name,
-            path,
-            args,
-            flags,
-            priority.into(),
-            stdin.into(),
-            stdout.into(),
-            stderr.into(),
-            match custom_stack_size {
-                None => OptZero::none(),
-                Some(size) => OptZero::some(unsafe { ShouldNotBeZero::new_unchecked(size.get()) }),
-            },
-            pid_ptr,
-        ),
-        pid
+    sysp_spawn(
+        name,
+        path,
+        args,
+        flags,
+        priority.into(),
+        stdin.into(),
+        stdout.into(),
+        stderr.into(),
+        match custom_stack_size {
+            None => OptZero::none(),
+            Some(size) => OptZero::some(unsafe { ShouldNotBeZero::new_unchecked(size.get()) }),
+        },
     )
+    .get()
 }
 
 // FIXME: I convert the argv form &[u8] to RawSlice

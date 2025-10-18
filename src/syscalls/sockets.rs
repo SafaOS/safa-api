@@ -3,7 +3,7 @@ use core::ptr::NonNull;
 use safa_abi::{
     errors::ErrorStatus,
     ffi::slice::Slice,
-    sockets::{SockBindAddr, SockCreateKind, SockDomain, SockMsgFlags},
+    sockets::{SockCreateKind, SockDomain, SockMsgFlags, SocketAddr},
 };
 
 use crate::syscalls::types::{
@@ -47,7 +47,7 @@ define_syscall! {
         /// - `sock_resource` either a Server Socket or a Socket Descriptor Resource
         /// - `addr` the address to bind to, the structure varies depending on the socket, an example is [`safa_abi::sockets::SockBindAbstractAddr`] for local sockets
         /// - `addr_struct_size` the total size of `addr` in bytes minus the unused bytes
-        syssock_bind(sock_resource: Ri, addr: RequiredPtr<SockBindAddr>, addr_struct_size: usize)
+        syssock_bind(sock_resource: Ri, addr: RequiredPtr<SocketAddr>, addr_struct_size: usize)
     },
     SyscallNum::SysSockListen => {
         /// Configures a Server Socket listening queue to be able to hold `backlog` pending connections,
@@ -68,7 +68,7 @@ define_syscall! {
         ///
         /// You can then do reads and writes using [`super::io::sysread`] and [`super::io::syswrite`], on that connection (offsets are ignored),
         /// They might block if the socket was set as blocking.
-        syssock_accept(sock_resource: Ri, accepted_addr: OptionalPtrMut<(NonNull<SockBindAddr>, usize)>) Ri
+        syssock_accept(sock_resource: Ri, accepted_addr: OptionalPtrMut<(NonNull<SocketAddr>, usize)>) Ri
     },
     SyscallNum::SysSockConnect => {
         /// Given a Generic Socket Descriptor, Requests a pending connection in a Server Sockets'
@@ -83,17 +83,17 @@ define_syscall! {
         /// - `out_connection_resource`: (return value) the Client's end of the established connection if successful
         ///
         /// see [`syssock_accept`] for more information, the Client's connection works exactly like the Server's
-        syssock_connect(sock_resource: Ri, addr: RequiredPtr<SockBindAddr>, addr_struct_size: usize)
+        syssock_connect(sock_resource: Ri, addr: RequiredPtr<SocketAddr>, addr_struct_size: usize)
     },
     SyscallNum::SysSockSendTo => {
         /// Given a socket descriptor, use it to send the data `data` to address `addr`.
         /// TODO: docs
-        syssock_sendto(sock_resource: Ri, data: Slice<u8>, flags: SockMsgFlags, addr: OptionalPtr<SockBindAddr>, addr_struct_size: usize) usize
+        syssock_sendto(sock_resource: Ri, data: Slice<u8>, flags: SockMsgFlags, addr: OptionalPtr<SocketAddr>, addr_struct_size: usize) usize
     },
     SyscallNum::SysSockRecvFrom => {
         /// Given a socket descriptor, use it to receive data only if its connected, puts the address of the sender in `received_addr`.
         /// TODO: docs
-        syssock_recvfrom(sock_resource: Ri, data: Slice<u8>, flags: SockMsgFlags, received_addr: OptionalPtrMut<(NonNull<SockBindAddr>, usize)>) usize
+        syssock_recvfrom(sock_resource: Ri, data: Slice<u8>, flags: SockMsgFlags, received_addr: OptionalPtrMut<(NonNull<SocketAddr>, usize)>) usize
     }
 }
 
@@ -117,7 +117,7 @@ pub fn create(domain: SockDomain, kind: SockCreateKind, protocol: u32) -> Result
 /// - `addr_struct_size` the total size of `addr` in bytes minus the unused bytes
 pub fn bind(
     sock_resource: Ri,
-    addr: &SockBindAddr,
+    addr: &SocketAddr,
     addr_struct_size: usize,
 ) -> Result<(), ErrorStatus> {
     syssock_bind(
@@ -147,7 +147,7 @@ pub fn listen(sock_resource: Ri, backlog: usize) -> Result<(), ErrorStatus> {
 /// They might block if the socket was set as blocking.
 pub fn accept(
     sock_resource: Ri,
-    accepted_addr: Option<&mut (NonNull<SockBindAddr>, usize)>,
+    accepted_addr: Option<&mut (NonNull<SocketAddr>, usize)>,
 ) -> Result<Ri, ErrorStatus> {
     let accepted_addr = OptionalPtrMut::from_option(
         accepted_addr.map(|ptr| unsafe { RequiredPtrMut::new_unchecked(ptr) }),
@@ -170,7 +170,7 @@ pub fn accept(
 /// see [`accept`] for more information, the Client's connection behaves exactly like the Server's
 pub fn connect(
     sock_resource: Ri,
-    addr: &SockBindAddr,
+    addr: &SocketAddr,
     addr_struct_size: usize,
 ) -> Result<(), ErrorStatus> {
     syssock_connect(
@@ -185,7 +185,7 @@ pub fn send_to(
     sock_resource: Ri,
     data: &[u8],
     flags: SockMsgFlags,
-    target_addr: Option<(&SockBindAddr, usize)>,
+    target_addr: Option<(&SocketAddr, usize)>,
 ) -> Result<usize, ErrorStatus> {
     let (target_addr, target_addr_size) =
         target_addr.map_or((None, 0), |(addr, size)| (Some(addr), size));
@@ -206,7 +206,7 @@ pub fn recv_from(
     sock_resource: Ri,
     buffer: &mut [u8],
     flags: SockMsgFlags,
-    source_addr: Option<&mut (NonNull<SockBindAddr>, usize)>,
+    source_addr: Option<&mut (NonNull<SocketAddr>, usize)>,
 ) -> Result<usize, ErrorStatus> {
     let source_addr = source_addr.map(|ptr| unsafe { RequiredPtr::new_unchecked(ptr) });
     let source_addr = OptionalPtr::from_option(source_addr);

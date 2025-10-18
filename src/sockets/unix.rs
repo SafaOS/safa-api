@@ -1,9 +1,10 @@
-use safa_abi::{consts::MAX_NAME_LENGTH, errors::ErrorStatus, sockets::SockMsgFlags};
-
-use crate::{
-    sockets::{Socket, SocketAddr},
-    syscalls::types::Ri,
+use safa_abi::{
+    consts::MAX_NAME_LENGTH,
+    errors::ErrorStatus,
+    sockets::{LocalSocketAddr, SockMsgFlags, ToSocketAddr},
 };
+
+use crate::{sockets::Socket, syscalls::types::Ri};
 
 /// Describes the kind of a local domain socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,10 +63,10 @@ impl<'a> UnixSockConnectionBuilder<'a> {
             .set_non_blocking(self.non_blocking)
             .build()?;
 
-        let addr = match self.addr {
-            SockAddr::Abstract(path) => SocketAddr::new_local(path),
+        let (addr, size) = match self.addr {
+            SockAddr::Abstract(path) => LocalSocketAddr::new_abstract_from(path),
         };
-        socket.connect(addr)?;
+        socket.connect(addr.as_generic(), size)?;
 
         Ok(UnixSockConnection(socket))
     }
@@ -97,6 +98,10 @@ impl UnixSockConnection {
     /// The raw Resource ID of self
     pub const fn ri(&self) -> Ri {
         self.0.ri()
+    }
+
+    pub const fn raw_socket(&self) -> &Socket {
+        &self.0
     }
 }
 
@@ -152,11 +157,11 @@ impl<'a> UnixListenerBuilder<'a> {
             .set_non_blocking(self.non_blocking)
             .build()?;
 
-        let addr = match self.addr {
-            SockAddr::Abstract(path) => SocketAddr::new_local(path),
+        let (addr, size) = match self.addr {
+            SockAddr::Abstract(path) => LocalSocketAddr::new_abstract_from(path),
         };
 
-        socket.bind(addr)?;
+        socket.bind(addr.as_generic(), size)?;
         socket.listen(self.backlog)?;
         Ok(UnixListener(socket))
     }
@@ -175,6 +180,10 @@ impl UnixListener {
     /// The raw resource ID of self
     pub const fn ri(&self) -> Ri {
         self.0.ri()
+    }
+
+    pub const fn raw_socket(&self) -> &Socket {
+        &self.0
     }
 }
 

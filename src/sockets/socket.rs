@@ -1,86 +1,26 @@
-use core::{net::Ipv4Addr, ptr::NonNull};
+use core::ptr::NonNull;
 
 use safa_abi::{
-    consts::MAX_NAME_LENGTH,
     errors::ErrorStatus,
-    sockets::{SockBindAbstractAddr, SockBindAddr, SockBindInetV4Addr, SockMsgFlags},
+    sockets::{SockMsgFlags, SocketAddr},
 };
 
 use crate::syscalls::{self, types::Ri};
 
-enum AbiSocketAddr {
-    Abstract((SockBindAbstractAddr, usize)),
-    Ipv4(SockBindInetV4Addr),
-}
-
-impl AbiSocketAddr {
-    pub fn as_ref(&self) -> (&SockBindAddr, usize) {
-        match self {
-            AbiSocketAddr::Abstract((addr, name_len)) => (
-                unsafe { &*(addr as *const SockBindAbstractAddr as *const SockBindAddr) },
-                name_len + size_of::<SockBindAddr>(),
-            ),
-            AbiSocketAddr::Ipv4(addr) => (
-                unsafe { &*(addr as *const SockBindInetV4Addr as *const SockBindAddr) },
-                size_of::<SockBindInetV4Addr>(),
-            ),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SocketAddr {
-    Local([u8; MAX_NAME_LENGTH], usize),
-    Ipv4 { addr: Ipv4Addr, port: u16 },
-}
-
-impl SocketAddr {
-    pub fn new_local(name: &str) -> Self {
-        assert!(name.len() <= MAX_NAME_LENGTH);
-
-        let mut bytes = [0; MAX_NAME_LENGTH];
-        bytes[..name.len()].copy_from_slice(name.as_bytes());
-        Self::Local(bytes, name.len())
-    }
-
-    pub const fn new_ipv4(addr: Ipv4Addr, port: u16) -> Self {
-        Self::Ipv4 { addr, port }
-    }
-
-    fn into_abi(self) -> AbiSocketAddr {
-        match self {
-            SocketAddr::Local(name, len) => {
-                AbiSocketAddr::Abstract((SockBindAbstractAddr::new(name), len))
-            }
-            SocketAddr::Ipv4 { addr, port } => {
-                AbiSocketAddr::Ipv4(SockBindInetV4Addr::new(port, addr))
-            }
-        }
-    }
-
-    pub fn from_bytes(u32: &[u32]) -> Self {
-        let size = u32.len() * size_of::<u32>();
-        assert!(size >= size_of::<SockBindAddr>());
-        let sock_bind_addr_ptr = u32.as_ptr().cast::<SockBindAddr>();
-
-        assert!(sock_bind_addr_ptr.is_aligned());
-        let as_sock_bind_addr = unsafe { &*sock_bind_addr_ptr };
-
-        match as_sock_bind_addr.kind {
-            SockBindAbstractAddr::KIND => {
-                let abstract_name = unsafe { &*sock_bind_addr_ptr.cast::<SockBindAbstractAddr>() };
-                Self::Local(abstract_name.name, size - size_of::<SockBindAddr>())
-            }
-            SockBindInetV4Addr::KIND => {
-                let inet_v4_addr = unsafe { &*sock_bind_addr_ptr.cast::<SockBindInetV4Addr>() };
-                Self::Ipv4 {
-                    addr: inet_v4_addr.ip,
-                    port: inet_v4_addr.port,
-                }
-            }
-            k => unreachable!("Unimplemented socket address kind: {k}"),
-        }
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u16)]
+pub enum SocketOpt {
+    /// Wetheher or not the socket can block.
+    Blocking = 0,
+    /// The number of maximum milliseconds a Read operation can wait for.
+    ReadTimeout = 1,
+    /// The number of maximum milliseconds a Write operation can wait for.
+    WriteTimeout = 2,
+    /// The time to live field in an Ip packet.
+    IpTTL = 3,
+    /// Broad cast permissions.
+    IpBroadcast = 4,
+    SocketError = 5,
 }
 
 /// Describes the kind of a socket.
@@ -157,7 +97,7 @@ impl SocketBuilder {
         let protocol = self.protocol;
         let mut kind = match self.kind {
             SocketKind::Datagram => AbiSocketCreateKind::SOCK_DGRAM,
-            SocketKind::Stream => AbiSocketCreateKind::from_bits_retaining(0), /* FIXME: AbiSocketCreateKind::SOCK_STREAM */
+            SocketKind::Stream => AbiSocketCreateKind::SOCK_STREAM,
             SocketKind::SeqPacket => AbiSocketCreateKind::SOCK_SEQPACKET,
         };
 
@@ -183,18 +123,14 @@ impl Socket {
 
     /// Wrapper around [`syscalls::sockets::bind`], binds the socket to a specific address.
     #[inline]
-    pub fn bind(&self, addr: SocketAddr) -> Result<(), ErrorStatus> {
-        let abi_addr = addr.into_abi();
-        let (abi_ref, abi_size) = abi_addr.as_ref();
-        syscalls::sockets::bind(self.0, abi_ref, abi_size)
+    pub fn bind(&self, addr: &SocketAddr, size: usize) -> Result<(), ErrorStatus> {
+        syscalls::sockets::bind(self.0, addr, size)
     }
 
     /// Wrapper around [`syscalls::sockets::connect`], connects the socket to an address.
     #[inline]
-    pub fn connect(&self, addr: SocketAddr) -> Result<(), ErrorStatus> {
-        let abi_addr = addr.into_abi();
-        let (abi_ref, abi_size) = abi_addr.as_ref();
-        syscalls::sockets::connect(self.0, abi_ref, abi_size)
+    pub fn connect(&self, addr: &SocketAddr, size: usize) -> Result<(), ErrorStatus> {
+        syscalls::sockets::connect(self.0, &addr, size)
     }
 
     /// Wrapper around [`syscalls::sockets::send_to`], sends data with flags to a specific address or to the connected address.
@@ -203,11 +139,9 @@ impl Socket {
         &self,
         buf: &[u8],
         flags: SockMsgFlags,
-        addr: Option<SocketAddr>,
+        addr: Option<(&SocketAddr, usize)>,
     ) -> Result<usize, ErrorStatus> {
-        let abi_addr = addr.map(|a| a.into_abi());
-        let abi_ref = abi_addr.as_ref().map(|a| a.as_ref());
-        syscalls::sockets::send_to(self.0, buf, flags, abi_ref)
+        syscalls::sockets::send_to(self.0, buf, flags, addr)
     }
 
     /// Same as [`send_to`] but sends data to the connected socket only.
@@ -223,25 +157,13 @@ impl Socket {
         &self,
         buf: &mut [u8],
         flags: SockMsgFlags,
-        retrieve_addr: bool,
-    ) -> Result<(usize, Option<SocketAddr>), ErrorStatus> {
-        let mut abi_addr = retrieve_addr.then(|| [0u32; size_of::<SockBindAbstractAddr>() / 4]);
-        let mut abi_ref = abi_addr.as_mut().map(|a| {
-            (
-                NonNull::new(a).unwrap().cast::<SockBindAddr>(),
-                size_of::<SockBindAbstractAddr>(),
-            )
-        });
-        let results = syscalls::sockets::recv_from(self.0, buf, flags, abi_ref.as_mut())?;
-
-        let received_from = match abi_ref {
-            None | Some((_, 0)) => None,
-            Some((_, size)) => Some(SocketAddr::from_bytes(&abi_addr.unwrap()[..size / 4])),
-        };
-        Ok((results, received_from))
+        store_addr: Option<&mut (NonNull<SocketAddr>, usize)>,
+    ) -> Result<usize, ErrorStatus> {
+        let results = syscalls::sockets::recv_from(self.0, buf, flags, store_addr)?;
+        Ok(results)
     }
 
-    /// Receives a message from the socket, returning the senders address if possible and the amount of bytes received.
+    /// Receives a message from the socket, storing the senders address if possible in `store_addr` and returns the amount of bytes received.
     ///
     /// Wrapper around [`syscalls::sockets::recv_from`].
     #[inline]
@@ -249,57 +171,43 @@ impl Socket {
         &self,
         buf: &mut [u8],
         flags: SockMsgFlags,
-    ) -> Result<(usize, Option<SocketAddr>), ErrorStatus> {
-        self.recv_from_inner(buf, flags, true)
+        store_addr: &mut (NonNull<SocketAddr>, usize),
+    ) -> Result<usize, ErrorStatus> {
+        self.recv_from_inner(buf, flags, Some(store_addr))
     }
 
     /// Same as [`Self::recv_from`] but doesn't return the sender's address.
     #[inline]
     pub fn recv(&self, buf: &mut [u8], flags: SockMsgFlags) -> Result<usize, ErrorStatus> {
-        self.recv_from_inner(buf, flags, false)
-            .map(|(received, a)| {
-                assert!(a.is_none());
-                received
-            })
+        self.recv_from_inner(buf, flags, None)
     }
 
     /// Wrapper around [`syscalls::sockets::accept`]
     fn accept_inner(
         &self,
-        retrieve_addr: bool,
-    ) -> Result<(Socket, Option<SocketAddr>), ErrorStatus> {
-        let mut abi_addr = retrieve_addr.then(|| [0u32; size_of::<SockBindAbstractAddr>() / 4]);
-        let mut abi_ref = abi_addr.as_mut().map(|a| {
-            (
-                NonNull::new(a).unwrap().cast::<SockBindAddr>(),
-                size_of::<SockBindAbstractAddr>(),
-            )
-        });
-        let results = syscalls::sockets::accept(self.0, abi_ref.as_mut())?;
+        store_addr: Option<&mut (NonNull<SocketAddr>, usize)>,
+    ) -> Result<Socket, ErrorStatus> {
+        let results = syscalls::sockets::accept(self.0, store_addr)?;
         let results = Socket(results);
-        let accepted_from = match abi_ref {
-            None | Some((_, 0)) => None,
-            Some((_, size)) => Some(SocketAddr::from_bytes(&abi_addr.unwrap()[..size / 4])),
-        };
 
-        Ok((results, accepted_from))
+        Ok(results)
     }
 
     /// Accepts a new connection from this socket.
     ///
     /// Wrapper around [`syscalls::sockets::accept`].
     pub fn accept(&self) -> Result<Socket, ErrorStatus> {
-        self.accept_inner(false).map(|(socket, a)| {
-            assert!(a.is_none());
-            socket
-        })
+        self.accept_inner(None)
     }
 
     /// Accepts a new connection from this socket returning the accepted socket and the address of the remote peer if it is available.
     ///
     /// Wrapper around [`syscalls::sockets::accept`].
-    pub fn accept_from(&self) -> Result<(Socket, Option<SocketAddr>), ErrorStatus> {
-        self.accept_inner(true)
+    pub fn accept_from(
+        &self,
+        store_addr: &mut (NonNull<SocketAddr>, usize),
+    ) -> Result<Socket, ErrorStatus> {
+        self.accept_inner(Some(store_addr))
     }
 
     /// Wrapper around [`syscalls::io::read`].
@@ -316,10 +224,18 @@ impl Socket {
         syscalls::io::io_command(self.0, cmd, arg)
     }
 
+    pub fn set_sock_opt<T: Into<u64>>(&self, opt: SocketOpt, arg: T) -> Result<(), ErrorStatus> {
+        self.io_cmd(opt as u16, arg.into())
+    }
+
+    /// Safety: the pointer is verified by the kernel to be aligned, however if you pass the wrong type, it will cause undefined behavior.
+    pub unsafe fn get_sock_opt<T>(&self, opt: SocketOpt, arg: &mut T) -> Result<(), ErrorStatus> {
+        self.io_cmd(opt as u16 & (1 << 15), arg as *mut T as u64)
+    }
+
     /// Configures the socket to block when necessary.
     pub fn set_blocking(&self, blocking: bool) -> Result<(), ErrorStatus> {
-        const SET_BLOCKING: u16 = 0;
-        self.io_cmd(SET_BLOCKING, blocking as u64)
+        self.set_sock_opt(SocketOpt::Blocking, blocking)
     }
 
     /// Returns the raw socket resource identifier.

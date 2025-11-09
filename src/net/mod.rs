@@ -140,6 +140,16 @@ impl AddrInfo {
         self.next.as_mut().map(|n| n.as_mut())
     }
 
+    /// Similar to [`Self::next_mut`] but returns a reference to the container
+    pub const fn next_mut_ref(&mut self) -> &mut Option<Box<AddrInfo>> {
+        &mut self.next
+    }
+
+    /// Takes the next [`AddrInfo`] structure in that linked list, leaving None instead.
+    pub fn take_next(&mut self) -> Option<AddrInfo> {
+        self.next.take().map(|n| *n)
+    }
+
     /// Returns the domain(family) of the socket that uses this address.
     pub const fn domain(&self) -> Option<SocketDomain> {
         SocketDomain::from_raw(self.family)

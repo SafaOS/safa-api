@@ -49,6 +49,17 @@ pub mod errors {
         ($err: ident, $io_err_ty: path) => {
             use $crate::errors::ErrorStatus::*;
             use $io_err_ty as IoErrorKind;
+
+            #[cfg(feature = "std")]
+            const fn unknown_err() -> IoErrorKind {
+                IoErrorKind::Other
+            }
+
+            #[cfg(feature = "rustc-dep-of-std")]
+            const fn unknown_err() -> IoErrorKind {
+                IoErrorKind::Uncategorized
+            }
+
             return match $err {
                 NoSuchAFileOrDirectory => IoErrorKind::NotFound,
                 AlreadyExists => IoErrorKind::AlreadyExists,
@@ -66,7 +77,7 @@ pub mod errors {
                 DirectoryNotEmpty => IoErrorKind::DirectoryNotEmpty,
                 OperationNotSupported | NotSupported | InvalidSyscall => IoErrorKind::Unsupported,
                 NotEnoughArguments | Generic | MMapError | Panic | Unknown
-                | ResourceCloneFailed | NotBound => IoErrorKind::Other,
+                | ResourceCloneFailed | NotBound => unknown_err(),
                 InvalidArgument | InvalidCommand => IoErrorKind::InvalidInput,
                 Timeout => IoErrorKind::TimedOut,
                 ConnectionClosed => IoErrorKind::ConnectionAborted,

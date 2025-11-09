@@ -203,11 +203,11 @@ pub enum LookupError {
     TemporaryFailure,
     /// Nameserver Refused to respond, might be a nameserver error.
     ServerRefused,
-    /// The given node resolution was succesful but no addresses were found.
+    /// The given node resolution was successful but no addresses were found.
     ///
     /// Eg. A DNS Query resolving the node as a domain name didn't return any address nodes.
     NoData,
-    /// A System Error has occured.
+    /// A System Error has occurred.
     System(ErrorStatus),
 }
 
@@ -226,7 +226,7 @@ impl From<DnsResolutionError> for LookupError {
 /// Given a `node` and a `service`, resolve the service to a port number and information about the service, and then lookup the node's addr info.
 ///
 /// `node` can be a string indicating a domain name in this case a DNS Resolution would be performed or None for only service lookup or an Ip Address respecting the family.
-/// `service` can be a port number or a string specifiying the service (it will be converted to a port number) not really implemented currently.
+/// `service` can be a port number or a string specifying the service (it will be converted to a port number) not really implemented currently.
 ///
 /// `hint` is information and hints about what addresses we should accept see [`AddrHints`], it is currently necessary to figure out the returned protocol and kind.
 ///

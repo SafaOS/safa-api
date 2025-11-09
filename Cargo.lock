@@ -26,8 +26,7 @@ checksum = "aa9c45b374136f52f2d6311062c7146bff20fec063c3f5d46a410bd937746955"
 [[package]]
 name = "safa-abi"
 version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c4584430f60d16f7ad5eef28c7246bb1578b8cea3129f8dc6f7be0fbc658dee"
+source = "git+https://github.com/SafaOS/safa-abi#4b24d069ab1527685ce2a59ea90889b2a351024b"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",
@@ -42,4 +41,16 @@ dependencies = [
  "rustc-std-workspace-alloc",
  "rustc-std-workspace-core",
  "safa-abi",
+ "simpldns",
+]
+
+[[package]]
+name = "simpldns"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a029d10222caeab29cc754ba77433f50bf9fed96d6f8c8d6a413ea314e42686d"
+dependencies = [
+ "compiler_builtins",
+ "rustc-std-workspace-alloc",
+ "rustc-std-workspace-core",
 ]

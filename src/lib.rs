@@ -92,6 +92,7 @@ pub mod errors {
 }
 
 pub mod alloc;
+pub mod net;
 pub mod process;
 /// An interface over SafaOS's Unix Sockets
 pub mod sockets;

@@ -12,7 +12,8 @@ description = "A high-level API over SafaOS's syscalls"
 test = false
 
 [dependencies]
-safa-abi = { version = "0.5.4" }
+safa-abi = { version = "0.5.4", git = "https://github.com/SafaOS/safa-abi" }
+simpldns = "0.1"
 core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }
 alloc = { version = "1.0.0", optional = true, package = "rustc-std-workspace-alloc" }
 compiler_builtins = { version = "0.1", optional = true }
@@ -26,6 +27,7 @@ rustc-dep-of-std = [
     "alloc",
     "compiler_builtins/rustc-dep-of-std",
     "safa-abi/rustc-dep-of-std",
+    "simpldns/rustc-dep-of-std"
 ]
 
 [package.metadata.docs.rs]

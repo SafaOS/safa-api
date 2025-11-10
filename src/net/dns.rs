@@ -20,7 +20,7 @@ use crate::{
 #[inline]
 fn get_nameserver() -> SocketAddrV4 {
     // TODO: actually read nameserver
-    SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 35)
+    SocketAddrV4::new(Ipv4Addr::new(1, 1, 1, 1), 53)
 }
 
 fn send_and_recv<'a>(
@@ -108,7 +108,7 @@ where
         .expect("Encoding the message shall not fail");
 
     let mut resp_buf = [0u8; 512];
-    let response_msg = send_and_recv(&encode_buf, &mut resp_buf, 5, 500)?;
+    let response_msg = send_and_recv(&encode_buf, &mut resp_buf, 3, 300)?;
     let message =
         DnsMessage::parse(response_msg).expect("DNS nameserver returned an invalid message");
 

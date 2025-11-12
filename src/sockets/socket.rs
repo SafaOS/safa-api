@@ -329,7 +329,7 @@ impl Socket {
 
     /// Safety: the pointer is verified by the kernel to be aligned, however if you pass the wrong type, it will cause undefined behavior.
     pub unsafe fn get_sock_opt<T>(&self, opt: SocketOpt, arg: &mut T) -> Result<(), ErrorStatus> {
-        self.io_cmd(opt as u16 & (1 << 15), arg as *mut T as u64)
+        self.io_cmd(opt as u16 | (1 << 15), arg as *mut T as u64)
     }
 
     /// Configures the socket to block when necessary.

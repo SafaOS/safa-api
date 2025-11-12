@@ -32,6 +32,13 @@ pub mod errors {
                 IoErrorKind::Other => Generic,
                 IoErrorKind::DirectoryNotEmpty => DirectoryNotEmpty,
                 IoErrorKind::Unsupported => OperationNotSupported,
+                IoErrorKind::HostUnreachable => HostUnreachable,
+                IoErrorKind::NetworkUnreachable => NetworkUnreachable,
+                IoErrorKind::AddrNotAvailable => AddressNotFound,
+                IoErrorKind::AddrInUse => AddressAlreadyInUse,
+                IoErrorKind::ConnectionRefused => ConnectionRefused,
+                IoErrorKind::TimedOut => Timeout,
+                IoErrorKind::ConnectionReset => ConnectionClosed,
 
                 _ => Generic,
             };
@@ -75,17 +82,21 @@ pub mod errors {
                 InvalidStr | Corrupted | NotExecutable | TypeMismatch => IoErrorKind::InvalidData,
                 OutOfMemory => IoErrorKind::OutOfMemory,
                 DirectoryNotEmpty => IoErrorKind::DirectoryNotEmpty,
-                OperationNotSupported | NotSupported | InvalidSyscall => IoErrorKind::Unsupported,
+                OperationNotSupported | NotSupported | InvalidSyscall | ProtocolNotSupported => {
+                    IoErrorKind::Unsupported
+                }
                 NotEnoughArguments | Generic | MMapError | Panic | Unknown
                 | ResourceCloneFailed | NotBound => unknown_err(),
                 InvalidArgument | InvalidCommand => IoErrorKind::InvalidInput,
                 Timeout => IoErrorKind::TimedOut,
-                ConnectionClosed => IoErrorKind::ConnectionAborted,
+                ConnectionClosed => IoErrorKind::ConnectionReset,
                 ConnectionRefused => IoErrorKind::ConnectionRefused,
                 AddressNotFound => IoErrorKind::AddrNotAvailable,
                 WouldBlock => IoErrorKind::WouldBlock,
                 ForceTerminated => IoErrorKind::Interrupted,
                 AddressAlreadyInUse => IoErrorKind::AddrInUse,
+                NetworkUnreachable => IoErrorKind::NetworkUnreachable,
+                HostUnreachable => IoErrorKind::HostUnreachable,
             };
         };
     }

@@ -180,5 +180,20 @@ macro_rules! printerrln {
 #[panic_handler]
 fn _panic(info: &core::panic::PanicInfo) -> ! {
     printerrln!("Safa-API panicked: {}", info);
+
+    #[cfg(feature = "backtrace")]
+    {
+        use mini_backtrace::Backtrace;
+        printerrln!("Backtrace:");
+        let backtrace = Backtrace::<16>::capture();
+        for frame in backtrace.frames {
+            printerrln!("  {:#x}", frame);
+        }
+
+        if backtrace.frames_omitted {
+            printerrln!("  ... <frames omitted>");
+        }
+    }
+
     syscalls::process::exit(1);
 }

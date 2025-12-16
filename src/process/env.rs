@@ -223,13 +223,15 @@ impl RawEnvStatic {
     }
 }
 
+#[cfg_attr(feature = "linkonce", unsafe(no_mangle))]
+#[cfg_attr(feature = "linkonce", linkage = "linkonce")]
 // TODO: refactor all of this
-pub(super) static RAW_ENV: RawEnvStatic = RawEnvStatic::new();
+pub(super) static SAAPI_RAW_ENV: RawEnvStatic = RawEnvStatic::new();
 
 // FIXME: use a RwLock
 static ENV: LazyCell<Mutex<EnvVars>> = LazyCell::new(|| {
     let mut env = EnvVars::new();
-    unsafe { env.insert_raw(RAW_ENV.as_slice()) };
+    unsafe { env.insert_raw(SAAPI_RAW_ENV.as_slice()) };
     Mutex::new(env)
 });
 

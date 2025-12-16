@@ -30,10 +30,13 @@ impl StaticAbiStructures {
 
 unsafe impl Sync for StaticAbiStructures {}
 
-pub(super) static ABI_STRUCTURES: StaticAbiStructures =
+#[cfg_attr(feature = "linkonce", unsafe(no_mangle))]
+#[cfg_attr(feature = "linkonce", linkage = "linkonce")]
+pub(super) static SAAPI_ABI_STRUCTURES: StaticAbiStructures =
     StaticAbiStructures(UnsafeCell::new(MaybeUninit::zeroed()));
 
-static STDIO: LazyCell<ProcessStdio> = LazyCell::new(|| unsafe { ABI_STRUCTURES.get().stdio });
+static STDIO: LazyCell<ProcessStdio> =
+    LazyCell::new(|| unsafe { SAAPI_ABI_STRUCTURES.get().stdio });
 static STDIN: LazyCell<Ri> = LazyCell::new(|| {
     let stdin: Option<Ri> = STDIO.into_rust().1;
     if let Some(stdin) = stdin {
@@ -110,5 +113,5 @@ exported_func! {
 }
 
 pub fn init_meta(abi_structures: AbiStructures) {
-    unsafe { ABI_STRUCTURES.init(abi_structures) };
+    unsafe { SAAPI_ABI_STRUCTURES.init(abi_structures) };
 }

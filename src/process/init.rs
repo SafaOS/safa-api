@@ -14,8 +14,8 @@ use crate::{
 };
 
 use super::{
-    args::{RawArgs, RAW_ARGS},
-    env::RAW_ENV,
+    args::{RawArgs, SAAPI_RAW_ARGS},
+    env::SAAPI_RAW_ENV,
     stdio::init_meta,
 };
 
@@ -24,14 +24,14 @@ use super::{
 fn init_args(args: Option<NonNull<[&'static str]>>) {
     unsafe {
         let raw = RawArgs::new(args);
-        RAW_ARGS.init(raw)
+        SAAPI_RAW_ARGS.init(raw)
     }
 }
 
 fn init_env(env: Option<NonNull<[&'static [u8]]>>) {
     unsafe {
         let raw = RawEnv::new(env);
-        RAW_ENV.init(raw)
+        SAAPI_RAW_ENV.init(raw)
     }
 }
 

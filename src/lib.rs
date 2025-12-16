@@ -6,6 +6,7 @@
 //! and raw SafaOS abi structures (see [`self::raw`])
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(feature = "linkonce", feature(linkage))]
 
 use core::fmt::{Arguments, Write};
 

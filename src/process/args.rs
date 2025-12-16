@@ -70,19 +70,21 @@ impl RawArgsStatic {
     }
 }
 
-pub(super) static RAW_ARGS: RawArgsStatic = RawArgsStatic::new();
+#[cfg_attr(feature = "linkonce", unsafe(no_mangle))]
+#[cfg_attr(feature = "linkonce", linkage = "linkonce")]
+pub(super) static SAAPI_RAW_ARGS: RawArgsStatic = RawArgsStatic::new();
 
 exported_func! {
     /// Get the number of arguments passed to the program.
     pub extern "C" fn sysget_argc() -> usize {
-        unsafe { RAW_ARGS.len() }
+        unsafe { SAAPI_RAW_ARGS.len() }
     }
 }
 
 exported_func! {
     /// Get the argument at the given index.
     pub extern "C" fn sysget_arg(index: usize) -> OptZero<Str> {
-        unsafe { RAW_ARGS.get(index).map(|s| Str::from_str(s)).into() }
+        unsafe { SAAPI_RAW_ARGS.get(index).map(|s| Str::from_str(s)).into() }
     }
 }
 
@@ -94,7 +96,7 @@ pub struct ArgsIter {
 
 impl ArgsIter {
     pub fn get() -> Self {
-        let args = unsafe { RAW_ARGS.as_slice() };
+        let args = unsafe { SAAPI_RAW_ARGS.as_slice() };
         Self { args, index: 0 }
     }
 

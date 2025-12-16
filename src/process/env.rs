@@ -224,7 +224,7 @@ impl RawEnvStatic {
 }
 
 #[cfg_attr(feature = "linkonce", unsafe(no_mangle))]
-#[cfg_attr(feature = "linkonce", linkage = "linkonce")]
+#[cfg_attr(feature = "linkonce", linkage = "weak")]
 // TODO: refactor all of this
 pub(super) static SAAPI_RAW_ENV: RawEnvStatic = RawEnvStatic::new();
 

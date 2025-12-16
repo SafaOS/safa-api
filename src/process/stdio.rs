@@ -31,7 +31,7 @@ impl StaticAbiStructures {
 unsafe impl Sync for StaticAbiStructures {}
 
 #[cfg_attr(feature = "linkonce", unsafe(no_mangle))]
-#[cfg_attr(feature = "linkonce", linkage = "linkonce")]
+#[cfg_attr(feature = "linkonce", linkage = "weak")]
 pub(super) static SAAPI_ABI_STRUCTURES: StaticAbiStructures =
     StaticAbiStructures(UnsafeCell::new(MaybeUninit::zeroed()));
 

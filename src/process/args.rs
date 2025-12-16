@@ -71,7 +71,7 @@ impl RawArgsStatic {
 }
 
 #[cfg_attr(feature = "linkonce", unsafe(no_mangle))]
-#[cfg_attr(feature = "linkonce", linkage = "linkonce")]
+#[cfg_attr(feature = "linkonce", linkage = "weak")]
 pub(super) static SAAPI_RAW_ARGS: RawArgsStatic = RawArgsStatic::new();
 
 exported_func! {

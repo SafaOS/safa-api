@@ -8,6 +8,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(feature = "linkonce", feature(linkage))]
 
+mod backtrace;
+
 use core::fmt::{Arguments, Write};
 
 use crate::process::stdio::sysget_stderr;
@@ -179,21 +181,10 @@ macro_rules! printerrln {
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 #[panic_handler]
 fn _panic(info: &core::panic::PanicInfo) -> ! {
+    use crate::backtrace::StackTrace;
+
     printerrln!("Safa-API panicked: {}", info);
-
-    #[cfg(feature = "backtrace")]
-    {
-        use mini_backtrace::Backtrace;
-        printerrln!("Backtrace:");
-        let backtrace = Backtrace::<16>::capture();
-        for frame in backtrace.frames {
-            printerrln!("  {:#x}", frame);
-        }
-
-        if backtrace.frames_omitted {
-            printerrln!("  ... <frames omitted>");
-        }
-    }
+    printerrln!("{}", unsafe { StackTrace::current() });
 
     syscalls::process::exit(1);
 }

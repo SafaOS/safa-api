@@ -36,18 +36,27 @@ fn sys_allocate(size_hint: usize) -> Option<(*mut u8, usize)> {
 
 impl Block {
     /// Asks the system for a new memory Block with a size big enough to hold `data_len` bytes
-    pub fn create(data_len: usize) -> Option<(NonNull<Self>, Option<NonNull<Block>>)> {
+    pub fn create(
+        data_len: usize,
+        data_alignment: usize,
+    ) -> Option<(NonNull<Self>, Option<NonNull<Block>>)> {
         let data_len = data_len.next_multiple_of(size_of::<Block>());
         let size = data_len + size_of::<Block>();
-        let size = size.next_multiple_of(align_of::<Block>());
+        let size = size
+            .next_multiple_of(align_of::<Block>())
+            .next_multiple_of(data_alignment);
+
         assert!(size <= isize::MAX as usize);
 
         let (alloc_ptr, alloc_size) = sys_allocate(size)?;
         assert!(alloc_size >= size);
 
-        let ptr = alloc_ptr as *mut Block;
-
         unsafe {
+            // We want the data pointer to be aligned to the data alignment
+            let data_ptr =
+                (alloc_ptr.add(size_of::<Block>()) as usize).next_multiple_of(data_alignment);
+            let ptr = (data_ptr - size_of::<Block>()) as *mut Block;
+
             *ptr = Self {
                 free: true,
                 data_len: size - size_of::<Block>(),
@@ -103,7 +112,7 @@ impl SystemAllocator {
 
         // To optimize the search for exact size we have to manipulate the data_len a bit
         let size = data_len + size_of::<Block>();
-        let size = size.next_multiple_of(align_of::<Block>());
+        let size = size.next_multiple_of(alignment);
         let data_len = size - size_of::<Block>();
 
         let mut current = self.head;
@@ -111,6 +120,7 @@ impl SystemAllocator {
 
         while let Some(block_ptr) = current {
             let block = unsafe { &*block_ptr.as_ptr() };
+
             if !block.free {
                 current = block.next;
                 continue;
@@ -120,6 +130,7 @@ impl SystemAllocator {
                 !(Block::data_from_ptr(block).cast::<u8>().as_ptr() as usize)
                     .is_multiple_of(alignment)
             } {
+                current = block.next;
                 continue;
             }
 
@@ -176,7 +187,7 @@ impl SystemAllocator {
             Some(block)
         } else {
             unsafe {
-                let (new_block, new_allocation_tail) = Block::create(data_len)?;
+                let (new_block, new_allocation_tail) = Block::create(data_len, alignment)?;
                 let set_next_of = new_allocation_tail.unwrap_or(new_block);
                 let stolen_head = self.head.take();
 

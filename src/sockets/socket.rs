@@ -5,7 +5,10 @@ use safa_abi::{
     sockets::{InetV4SocketAddr, SockMsgFlags, SocketAddr, ToSocketAddr},
 };
 
-use crate::syscalls::{self, types::Ri};
+use crate::{
+    resource::Resource,
+    syscalls::{self, types::Ri},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u16)]
@@ -43,21 +46,12 @@ impl SocketKind {
     }
 
     #[inline(always)]
-    pub(crate) const fn from_raw(raw: AbiSocketKind) -> Option<(Self, bool)> {
-        // FIXME make this simpler and safe
-        let kind: u16 = unsafe { core::mem::transmute(raw) };
-
-        if kind == u16::MAX {
+    pub(crate) const fn from_raw(kind: AbiSocketKind) -> Option<(Self, bool)> {
+        if kind.contains(AbiSocketKind::UNKNOWN) {
             return None;
         }
 
-        let (kind, can_block) = unsafe {
-            let no_block_flag = core::mem::transmute::<_, u16>(AbiSocketKind::SOCK_NON_BLOCKING);
-            (
-                AbiSocketKind::from_bits_retaining(kind & !no_block_flag),
-                kind & no_block_flag == 0,
-            )
-        };
+        let (kind, can_block) = (kind.strip_flags(), kind.is_blocking());
 
         let this = match kind {
             AbiSocketKind::SOCK_DGRAM => Self::Datagram,
@@ -104,14 +98,7 @@ impl SocketDomain {
 
 /// Represents a socket.
 #[derive(Debug)]
-pub struct Socket(Ri);
-
-impl Drop for Socket {
-    fn drop(&mut self) {
-        // TODO: Resources high-level wrapper
-        syscalls::resources::destroy_resource(self.0).expect("Failed to drop socket")
-    }
-}
+pub struct Socket(Resource);
 
 /// Represents a builder for creating sockets.
 #[derive(Debug, Clone, Copy)]
@@ -159,11 +146,26 @@ impl SocketBuilder {
             kind = kind | AbiSocketCreateKind::SOCK_NON_BLOCKING;
         }
 
-        syscalls::sockets::create(domain, kind, protocol).map(|ri| Socket(ri))
+        syscalls::sockets::create(domain, kind, protocol)
+            .map(|ri| Socket(unsafe { Resource::from_raw(ri) }))
     }
 }
 
 impl Socket {
+    /// Safety: resource must be a socket.
+    pub unsafe fn from_resource(resource: Resource) -> Self {
+        Self(resource)
+    }
+
+    #[inline]
+    pub fn into_resource(self) -> Resource {
+        self.0
+    }
+    #[inline]
+    pub const fn resource(&self) -> &Resource {
+        &self.0
+    }
+
     /// Returns a new socket builder.
     pub const fn builder(domain: SocketDomain, kind: SocketKind, protocol: u32) -> SocketBuilder {
         SocketBuilder::new(domain, kind, protocol)
@@ -172,13 +174,13 @@ impl Socket {
     /// Wrapper around [`syscalls::sockets::listen`], configures the socket to listen for incoming connections.
     #[inline]
     pub fn listen(&self, backlog: usize) -> Result<(), ErrorStatus> {
-        syscalls::sockets::listen(self.0, backlog)
+        syscalls::sockets::listen(self.0.ri(), backlog)
     }
 
     /// Wrapper around [`syscalls::sockets::bind`], binds the socket to a specific address.
     #[inline]
     pub fn bind(&self, addr: &SocketAddr, size: usize) -> Result<(), ErrorStatus> {
-        syscalls::sockets::bind(self.0, addr, size)
+        syscalls::sockets::bind(self.0.ri(), addr, size)
     }
 
     /// Same as [`Self::bind`] but takes in a [`core::net::SocketAddrV4`].
@@ -191,7 +193,7 @@ impl Socket {
     /// Wrapper around [`syscalls::sockets::connect`], connects the socket to an address.
     #[inline]
     pub fn connect(&self, addr: &SocketAddr, size: usize) -> Result<(), ErrorStatus> {
-        syscalls::sockets::connect(self.0, &addr, size)
+        syscalls::sockets::connect(self.0.ri(), &addr, size)
     }
 
     /// Wrapper around [`syscalls::sockets::send_to`], sends data with flags to a specific address or to the connected address.
@@ -202,7 +204,7 @@ impl Socket {
         flags: SockMsgFlags,
         addr: Option<(&SocketAddr, usize)>,
     ) -> Result<usize, ErrorStatus> {
-        syscalls::sockets::send_to(self.0, buf, flags, addr)
+        syscalls::sockets::send_to(self.0.ri(), buf, flags, addr)
     }
 
     /// Like [`Self::send_to`] but takes in a [`core::net::SocketAddr`].
@@ -241,7 +243,7 @@ impl Socket {
         flags: SockMsgFlags,
         store_addr: Option<&mut (NonNull<SocketAddr>, usize)>,
     ) -> Result<usize, ErrorStatus> {
-        let results = syscalls::sockets::recv_from(self.0, buf, flags, store_addr)?;
+        let results = syscalls::sockets::recv_from(self.0.ri(), buf, flags, store_addr)?;
         Ok(results)
     }
 
@@ -286,8 +288,8 @@ impl Socket {
         &self,
         store_addr: Option<&mut (NonNull<SocketAddr>, usize)>,
     ) -> Result<Socket, ErrorStatus> {
-        let results = syscalls::sockets::accept(self.0, store_addr)?;
-        let results = Socket(results);
+        let results = syscalls::sockets::accept(self.0.ri(), store_addr)?;
+        let results = Socket(unsafe { Resource::from_raw(results) });
 
         Ok(results)
     }
@@ -311,20 +313,20 @@ impl Socket {
 
     /// Wrapper around [`syscalls::io::read`].
     pub fn read(&self, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
-        syscalls::io::read(self.0, 0, buf)
+        unsafe { self.0.read(0, buf) }
     }
 
     /// Wrapper around [`syscalls::io::write`].
     pub fn write(&self, buf: &[u8]) -> Result<usize, ErrorStatus> {
-        syscalls::io::write(self.0, 0, buf)
+        unsafe { self.0.write(0, buf) }
     }
 
-    pub fn io_cmd(&self, cmd: u16, arg: u64) -> Result<(), ErrorStatus> {
-        syscalls::io::io_command(self.0, cmd, arg)
+    pub unsafe fn io_cmd(&self, cmd: u16, arg: u64) -> Result<(), ErrorStatus> {
+        self.0.io_command(cmd, arg)
     }
 
     pub fn set_sock_opt<T: Into<u64>>(&self, opt: SocketOpt, arg: T) -> Result<(), ErrorStatus> {
-        self.io_cmd(opt as u16, arg.into())
+        unsafe { self.io_cmd(opt as u16, arg.into()) }
     }
 
     /// Safety: the pointer is verified by the kernel to be aligned, however if you pass the wrong type, it will cause undefined behavior.
@@ -339,6 +341,6 @@ impl Socket {
 
     /// Returns the raw socket resource identifier.
     pub const fn ri(&self) -> Ri {
-        self.0
+        self.resource().ri()
     }
 }

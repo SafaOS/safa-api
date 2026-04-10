@@ -253,7 +253,6 @@ impl SystemAllocator {
 unsafe impl Send for SystemAllocator {}
 unsafe impl Sync for SystemAllocator {}
 
-// FIXME: implement locks before multithreading
 pub struct GlobalSystemAllocator {
     inner: Mutex<SystemAllocator>,
 }

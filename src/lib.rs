@@ -117,8 +117,11 @@ pub mod errors {
 }
 
 pub mod alloc;
+pub mod mem;
 pub mod net;
 pub mod process;
+pub mod resource;
+pub mod shm;
 /// An interface over SafaOS's Unix Sockets
 pub mod sockets;
 pub mod sync;

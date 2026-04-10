@@ -12,7 +12,7 @@ description = "A high-level API over SafaOS's syscalls"
 test = false
 
 [dependencies]
-safa-abi = { version = "0.5.4", git = "https://github.com/SafaOS/safa-abi" }
+safa-abi = { version = "0.6.0", git = "https://github.com/SafaOS/safa-abi" }
 simpldns = "0.1"
 core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }
 alloc = { version = "1.0.0", optional = true, package = "rustc-std-workspace-alloc" }

@@ -30,7 +30,7 @@ const fn fam_to_raw(fam: Option<SocketDomain>) -> AbiSocketDomain {
 const fn kind_to_raw(kind: Option<SocketKind>) -> AbiSocketKind {
     match kind {
         Some(k) => k.into_raw(),
-        None => AbiSocketKind::from_bits_retaining(u16::MAX),
+        None => AbiSocketKind::from_bits(u16::MAX),
     }
 }
 

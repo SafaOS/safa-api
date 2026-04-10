@@ -25,8 +25,8 @@ checksum = "aa9c45b374136f52f2d6311062c7146bff20fec063c3f5d46a410bd937746955"
 
 [[package]]
 name = "safa-abi"
-version = "0.5.4"
-source = "git+https://github.com/SafaOS/safa-abi#3fbd1db53cd976181ff80fb4f5977aba3399b3a3"
+version = "0.6.0"
+source = "git+https://github.com/SafaOS/safa-abi#8cd5ff0c0f9ecb570f0a2686c763a7402003c20c"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",

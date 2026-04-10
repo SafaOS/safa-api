@@ -22,7 +22,7 @@ define_syscall! {
 /// # Returns
 /// - [`ErrorStatus::InvalidResource`] if the id `ri` is invalid
 #[inline]
-pub fn destroy_resource(ri: Ri) -> Result<(), ErrorStatus> {
+pub fn destroy(ri: Ri) -> Result<(), ErrorStatus> {
     sysr_destroy(ri).get()
 }
 

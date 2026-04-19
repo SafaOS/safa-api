@@ -126,6 +126,7 @@ pub mod shm;
 pub mod sockets;
 pub mod sync;
 pub mod syscalls;
+pub mod vtty;
 pub use safa_abi as abi;
 pub use safa_abi::ffi;
 

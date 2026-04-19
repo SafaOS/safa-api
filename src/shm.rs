@@ -1,4 +1,4 @@
-//! Shared memory objects used by the compositor.
+//! SafaOS Shared Memory IPC Wrappers.
 
 use core::ptr::NonNull;
 
@@ -19,6 +19,11 @@ pub fn raw_create(pages: usize, flags: ShmFlags) -> Result<(ShmKey, Resource), E
         .map(|(key, resource)| (key, unsafe { Resource::from_raw(resource) }))
 }
 
+/// higher-level wrapper around [`syscalls::mem::shm_open`].
+pub fn raw_open(key: ShmKey, flags: ShmFlags) -> Result<Resource, ErrorStatus> {
+    syscalls::mem::shm_open(key, flags).map(|ri| unsafe { Resource::from_raw(ri) })
+}
+
 /// SharedObject represents a shared memory object between multiple address spaces.
 ///
 /// Synchronization is left to be handled by the user.
@@ -34,6 +39,25 @@ unsafe impl Send for SharedObject {}
 unsafe impl Sync for SharedObject {}
 
 impl SharedObject {
+    /// Maps and opens a given SHM key.
+    ///
+    /// returning a SharedObject on success.
+    pub fn map_open(
+        mem_mapper: &MemoryMapper,
+        key: ShmKey,
+        size: usize,
+    ) -> Result<Self, crate::errors::ErrorStatus> {
+        let shm_res = syscalls::mem::shm_open(key, ShmFlags::NONE)
+            .map(|ri| unsafe { Resource::from_raw(ri) })?;
+
+        let (mem_map, buf) = mem_mapper.map_next_resource(size.div_ceil(4096), &shm_res, None)?;
+        Ok(Self {
+            key,
+            _mem_map: mem_map,
+            _shm: shm_res,
+            buf,
+        })
+    }
     /// Allocates a new shared memory object with the given size, shared with the WM.
     ///
     /// Returns a Result containing the SharedObject or an ErrorStatus if allocation fails.
@@ -60,6 +84,12 @@ impl SharedObject {
     /// Returns the pointer to the shared memory buffer.
     pub const fn data_ptr(&self) -> NonNull<[u8]> {
         self.buf
+    }
+
+    #[inline(always)]
+    /// Returns the pointer to the shared memory buffer as a given Type T.
+    pub const fn data_as<T: Sized>(&self) -> NonNull<[T]> {
+        NonNull::slice_from_raw_parts(self.buf.cast::<T>(), self.buf.len() / size_of::<T>())
     }
 
     /// Returns a reference to the shared memory buffer.

@@ -68,6 +68,7 @@ pub fn wait(cid: Tid) -> Result<(), ErrorStatus> {
 /// # Returns
 /// - Err(()) if duration as milliseconds is larger than usize::MAX
 pub fn sleep(duration: Duration) -> Result<(), ()> {
+    // TODO: mcirosleep and nanosleep and friends.
     let ms: usize = duration.as_millis() as usize;
     Ok(assert!(syst_sleep(ms).get().is_ok()))
 }

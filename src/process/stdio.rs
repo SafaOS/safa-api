@@ -1,42 +1,16 @@
 //! contains functions related to standard input/output/error streams descriptors
 //! api must be initialized before using these functions, see [`super::init`]
 
-use core::{cell::UnsafeCell, mem::MaybeUninit};
-
 use crate::{
     exported_func,
+    process::proc_meta,
     syscalls::{self, types::Ri},
 };
-use safa_abi::{
-    ffi::option::COption,
-    process::{AbiStructures, ProcessStdio},
-};
+use safa_abi::{ffi::option::COption, process::ProcessStdio};
 
 use crate::sync::cell::LazyCell;
 
-pub(super) struct StaticAbiStructures(UnsafeCell<MaybeUninit<AbiStructures>>);
-
-impl StaticAbiStructures {
-    pub unsafe fn init(&self, structures: AbiStructures) {
-        let ptr = self.0.get();
-        ptr.write(MaybeUninit::new(structures));
-    }
-
-    unsafe fn get(&'static self) -> &'static AbiStructures {
-        let ptr = self.0.get();
-        MaybeUninit::assume_init_ref(&*ptr)
-    }
-}
-
-unsafe impl Sync for StaticAbiStructures {}
-
-#[cfg_attr(feature = "linkonce", unsafe(no_mangle))]
-#[cfg_attr(feature = "linkonce", linkage = "weak")]
-pub(super) static SAAPI_ABI_STRUCTURES: StaticAbiStructures =
-    StaticAbiStructures(UnsafeCell::new(MaybeUninit::zeroed()));
-
-static STDIO: LazyCell<ProcessStdio> =
-    LazyCell::new(|| unsafe { SAAPI_ABI_STRUCTURES.get().stdio });
+static STDIO: LazyCell<ProcessStdio> = LazyCell::new(|| proc_meta().stdio);
 static STDIN: LazyCell<Ri> = LazyCell::new(|| {
     let stdin: Option<Ri> = STDIO.into_rust().1;
     if let Some(stdin) = stdin {
@@ -110,8 +84,4 @@ exported_func! {
     pub extern "C" fn sysget_stdin() -> Ri {
         *STDIN
     }
-}
-
-pub fn init_meta(abi_structures: AbiStructures) {
-    unsafe { SAAPI_ABI_STRUCTURES.init(abi_structures) };
 }

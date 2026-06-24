@@ -45,6 +45,8 @@ macro_rules! define_syscall {
 
 pub(crate) use define_syscall;
 
+/// (SysClock) Clock related syscalls and operations.
+pub mod clock;
 /// FS Operations related syscalls (that takes a path) such as create, remove, open, rename and etc
 pub mod fs;
 /// (SysTFut) Futex related syscalls and operations

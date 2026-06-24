@@ -16,7 +16,7 @@ use crate::{
 use super::{
     args::{RawArgs, SAAPI_RAW_ARGS},
     env::SAAPI_RAW_ENV,
-    stdio::init_meta,
+    init_proc_meta,
 };
 
 // Initialization
@@ -54,7 +54,7 @@ exported_func! {
 
         init_args(Some(args_ptr));
         init_env(Some(env_ptr));
-        init_meta(task_abi_structures);
+        init_proc_meta(task_abi_structures);
         }
     }
 }

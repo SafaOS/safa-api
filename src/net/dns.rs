@@ -89,7 +89,8 @@ where
     F: FnMut(Ipv4Addr),
 {
     // TODO: random numbers
-    let trans_id = syscalls::misc::uptime() as u16;
+    let trans_id =
+        syscalls::clock::clock_gettime(safa_abi::clock::Clock::Monotonic).as_nanos() as u16;
     let questions = [
         DnsQuestion::try_new(domain, DnsType::A /* TODO: Ipv6? */, DnsClass::IN)
             .map_err(|_| DnsResolutionError::InvalidDomainName)?,

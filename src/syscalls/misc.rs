@@ -1,5 +1,3 @@
-use crate::syscalls::types::RequiredPtrMut;
-
 use super::{define_syscall, SyscallNum};
 
 define_syscall! {
@@ -23,17 +21,6 @@ pub fn reboot() -> ! {
     sysreboot()
 }
 
-define_syscall! {
-    SyscallNum::SysUptime => {
-        /// returns the system uptime in milliseconds
-        sysuptime(uptime: RequiredPtrMut<u64>)
-    }
-}
-
-#[inline]
-pub fn uptime() -> u64 {
-    let mut results: u64 = 0;
-    let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut results) };
-    sysuptime(ptr);
-    results
-}
+/// uptime and sysuptime are really just deprecated misc syscalls.
+#[allow(deprecated)]
+pub use super::clock::{sysuptime, uptime};

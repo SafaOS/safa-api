@@ -11,6 +11,7 @@ pub mod env;
 #[cfg(not(feature = "std"))]
 pub mod init;
 pub mod stdio;
+#[cfg(not(feature = "std"))]
 pub use init::*;
 
 struct StaticAbiStructures(UnsafeCell<MaybeUninit<AbiStructures>>);

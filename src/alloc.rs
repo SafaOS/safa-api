@@ -248,6 +248,29 @@ impl SystemAllocator {
             self.merge_blocks();
         }
     }
+
+    #[inline]
+    unsafe fn reallocate(
+        &mut self,
+        old_data: NonNull<u8>,
+        new_size: usize,
+        new_alignment: usize,
+    ) -> Option<NonNull<[u8]>> {
+        unsafe {
+            let new_data = self.allocate(new_size, new_alignment)?;
+
+            let old_block_ptr = Block::block_from_data_ptr(old_data).as_ptr();
+            let old_block = &mut *old_block_ptr;
+
+            new_data
+                .cast()
+                .copy_from_nonoverlapping(old_data, old_block.data_len);
+            old_block.free = true;
+
+            self.merge_blocks();
+            Some(new_data)
+        }
+    }
 }
 
 unsafe impl Send for SystemAllocator {}
@@ -274,7 +297,17 @@ impl GlobalSystemAllocator {
         self.inner.lock().deallocate(ptr)
     }
 
-    // TODO: implement grow and shrink
+    #[inline]
+    pub unsafe fn reallocate(
+        &self,
+        ptr: NonNull<u8>,
+        new_size: usize,
+        new_align: usize,
+    ) -> Option<NonNull<[u8]>> {
+        self.inner.lock().reallocate(ptr, new_size, new_align)
+    }
+
+    // TODO: implement proper grow and shrink
 }
 
 unsafe impl Sync for GlobalSystemAllocator {}

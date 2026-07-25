@@ -264,7 +264,7 @@ impl SystemAllocator {
 
             new_data
                 .cast()
-                .copy_from_nonoverlapping(old_data, old_block.data_len);
+                .copy_from_nonoverlapping(old_data, old_block.data_len.min(new_data.len()));
             old_block.free = true;
 
             self.merge_blocks();

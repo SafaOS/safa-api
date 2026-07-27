@@ -50,7 +50,7 @@ impl SharedObject {
         let shm_res = syscalls::mem::shm_open(key, ShmFlags::NONE)
             .map(|ri| unsafe { Resource::from_raw(ri) })?;
 
-        let (mem_map, buf) = mem_mapper.map_next_resource(size.div_ceil(4096), &shm_res, None)?;
+        let (mem_map, buf) = mem_mapper.map_next_resource_bytes(size, &shm_res, None)?;
         Ok(Self {
             key,
             _mem_map: mem_map,
@@ -62,11 +62,10 @@ impl SharedObject {
     ///
     /// Returns a Result containing the SharedObject or an ErrorStatus if allocation fails.
     pub fn allocate(size: usize) -> Result<Self, crate::errors::ErrorStatus> {
-        let pages = size.div_ceil(4096);
         let flags = ShmFlags::NONE;
 
-        let (key, shm) = raw_create(pages, flags).expect("Failed to open ShmKey");
-        let (mem_map, buf) = MemoryMapper::new().map_next_resource(pages, &shm, None)?;
+        let (key, shm) = raw_create(size.div_ceil(4096), flags).expect("Failed to open ShmKey");
+        let (mem_map, buf) = MemoryMapper::new().map_next_resource_bytes(size, &shm, None)?;
 
         Ok(Self {
             key,

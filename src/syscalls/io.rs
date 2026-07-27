@@ -3,13 +3,21 @@ use core::time::Duration;
 use safa_abi::{
     errors::ErrorStatus,
     ffi::slice::Slice,
-    fs::{DirEntry, FileAttr},
+    fs::{DirEntry, FileAttr, SeekWrench},
     poll::PollEntry,
 };
 
-use crate::syscalls::types::{OptionalPtrMut, RequiredPtrMut, Ri};
+use crate::syscalls::types::{IntoSyscallArg, OptionalPtrMut, RequiredPtrMut, Ri};
 
 use super::SyscallNum;
+
+impl IntoSyscallArg for SeekWrench {
+    type RegResults = (usize, usize);
+    fn into_syscall_arg(self) -> Self::RegResults {
+        let (wrench, off): (u8, usize) = self.into();
+        (wrench as usize, off as usize)
+    }
+}
 
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;
@@ -77,6 +85,26 @@ define_syscall! {
         ///
         /// Returns the number of bytes read.
         sysread(fd: Ri, offset: isize, buf: Slice<u8>) usize
+    },
+    SyscallNum::SysIOWriteNext => {
+        /// Writes `len` bytes from `buf` to the file with the resource id `fd` at the next offset
+        ///
+        /// Returns the number of bytes written
+        sysio_write_next(fd: Ri, buf: Slice<u8>) usize
+    },
+    SyscallNum::SysIOReadNext => {
+        /// Reads `len` bytes from the file with the resource id `fd` at the next offset into `buf`
+        ///
+        /// Returns the number of bytes read.
+        sysio_read_next(fd: Ri, buf: Slice<u8>) usize
+    },
+    SyscallNum::SysIOSeek => {
+        /// Sets the next offset of [`sysio_read_next`] and [`sysio_write_next`] to the given offset.
+        sysio_seek(fd: Ri, wrench: SeekWrench) usize
+    },
+    SyscallNum::SysIOTell => {
+        /// Returns the next offset in bytes of [`sysio_read_next`] and [`sysio_write_next`].
+        sysio_tell(fd: Ri) usize
     },
     SyscallNum::SysIOSync => {
         /// Syncs the resource with the resource id `fd`
@@ -152,6 +180,36 @@ pub fn fattrs(fd: Ri) -> Result<FileAttr, ErrorStatus> {
 pub fn read(fd: Ri, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
     let slice = Slice::from_slice(buf);
     sysread(fd, offset, slice).get()
+}
+
+#[inline]
+/// Reads `buf.len()` bytes from the file with the resource id `fd` at the next offset into `buf`
+pub fn read_next(fd: Ri, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
+    let slice = Slice::from_slice(buf);
+    sysio_read_next(fd, slice).get()
+}
+
+#[inline]
+/// Writes `buf.len()` bytes from `buf` to the file with the resource id `fd` at the next offset
+///
+/// and returns the number of bytes written
+pub fn write_next(fd: Ri, buf: &[u8]) -> Result<usize, ErrorStatus> {
+    let slice = Slice::from_slice(buf);
+    sysio_write_next(fd, slice).get()
+}
+
+#[inline]
+/// Sets the next [`write_next`] and [`read_next`] offset of `fd` to `wrench`.
+///
+/// returns the new offset in bytes.
+pub fn seek(fd: Ri, wrench: SeekWrench) -> Result<usize, ErrorStatus> {
+    sysio_seek(fd, wrench).get()
+}
+
+/// Gets the next [`write_next`] and [`read_next`] offset of `fd`.
+#[inline]
+pub fn tell(fd: Ri) -> Result<usize, ErrorStatus> {
+    sysio_tell(fd).get()
 }
 
 #[inline]

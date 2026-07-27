@@ -313,12 +313,12 @@ impl Socket {
 
     /// Wrapper around [`syscalls::io::read`].
     pub fn read(&self, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
-        unsafe { self.0.read(0, buf) }
+        self.0.read(0, buf)
     }
 
     /// Wrapper around [`syscalls::io::write`].
     pub fn write(&self, buf: &[u8]) -> Result<usize, ErrorStatus> {
-        unsafe { self.0.write(0, buf) }
+        self.0.write(0, buf)
     }
 
     pub unsafe fn io_cmd(&self, cmd: u16, arg: u64) -> Result<(), ErrorStatus> {

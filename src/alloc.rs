@@ -4,11 +4,10 @@
 
 #[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 use safa_abi::ffi::{option::OptZero, slice::Slice};
-use safa_abi::mem::MemMapFlags;
+use safa_abi::mem::MemFlags;
 
-use crate::sync::locks::Mutex;
+use crate::{mem::MemoryMapper, sync::locks::Mutex};
 
-use super::syscalls;
 use core::{alloc::GlobalAlloc, ptr::NonNull};
 
 #[derive(Debug, Default)]
@@ -20,18 +19,11 @@ struct Block {
 }
 
 fn sys_allocate(size_hint: usize) -> Option<(*mut u8, usize)> {
-    let page_count = size_hint.next_multiple_of(4096) / 4096;
-    let (_, s) = syscalls::mem::map(
-        core::ptr::null(),
-        page_count,
-        0,
-        None,
-        None,
-        MemMapFlags::WRITE,
-    )
-    .ok()?;
-
-    Some((s.as_ptr() as *mut u8, s.len()))
+    let data = MemoryMapper::new()
+        .prot(MemFlags::READ | MemFlags::WRITE | MemFlags::EXEC)
+        .map_next_bytes(size_hint)
+        .ok()?;
+    Some((data.as_ptr() as *mut u8, data.len()))
 }
 
 impl Block {

@@ -1,7 +1,10 @@
 use core::ptr::NonNull;
 
 use safa_abi::errors::ErrorStatus;
-use safa_abi::mem::{MemMapFlags, RawMemMapConfig, ShmFlags};
+use safa_abi::mem::{
+    MemFlags, MemMap2Flags, MemMapFlags, MemMapOp, MemMapTarget, RawMemMap2Config, RawMemMapConfig,
+    ShmFlags,
+};
 
 use crate::syscalls::types::{IntoSyscallArg, RequiredPtrMut, Ri};
 
@@ -15,11 +18,36 @@ impl IntoSyscallArg for MemMapFlags {
     }
 }
 
+impl IntoSyscallArg for MemMap2Flags {
+    type RegResults = (usize,);
+    fn into_syscall_arg(self) -> Self::RegResults {
+        (unsafe { core::mem::transmute::<_, u32>(self) } as usize,)
+    }
+}
+
+impl IntoSyscallArg for MemFlags {
+    type RegResults = (usize,);
+    fn into_syscall_arg(self) -> Self::RegResults {
+        (unsafe { core::mem::transmute::<_, u8>(self) } as usize,)
+    }
+}
+
 define_syscall! {
     SyscallNum::SysMemMap => {
         /// See [`SyscallNum::SysMemMap`]
         sysmem_map(memmap_config: RequiredPtr<RawMemMapConfig>, flags: MemMapFlags, out_res_id: OptionalPtrMut<Ri>) NonNull<u8>
-    }
+    },
+    SyscallNum::SysMemUnmap => {
+        /// See [`SyscallNum::SysMemMap`]
+        sysmem_unmap(addr: *const (), size: usize)
+    },
+    SyscallNum::SysMemOp => {
+        sysmem_op(target: RequiredPtr<MemMapTarget>, op: RequiredPtr<MemMapOp>)
+    },
+    SyscallNum::SysMemMap2 => {
+        /// See [`SyscallNum::SysMemMap`] and [`SyscallNum::SysMemMap2`].
+        sysmem_map2(memmap_config: RequiredPtr<RawMemMap2Config>, flags: MemMap2Flags, prot: MemFlags, out_res_id: OptionalPtrMut<Ri>) NonNull<u8>
+    },
 }
 
 /// See [`SyscallNum::SysMemMap`] and [`RawMemMapConfig`]
@@ -29,44 +57,74 @@ define_syscall! {
 /// the resource ID of the Tracked Mapping and the slice of bytes in the mapping
 pub fn map(
     addr_hint: *const (),
-    page_count: usize,
-    guard_pages_count: usize,
+    size: usize,
     resource_to_map: Option<Ri>,
     resource_off: Option<isize>,
-    mut flags: MemMapFlags,
-) -> Result<(Ri, NonNull<[u8]>), ErrorStatus> {
+    mut flags: MemMap2Flags,
+    prot: MemFlags,
+    control_resource_out: Option<&mut Ri>,
+) -> Result<NonNull<[u8]>, ErrorStatus> {
+    let size = size.next_multiple_of(4096);
+
     let (ri, off) = if let Some(ri) = resource_to_map {
         let off = resource_off.unwrap_or_default();
-        flags = flags | MemMapFlags::MAP_RESOURCE;
+        flags = flags | MemMap2Flags::MAP_RESOURCE;
         (ri, off)
     } else {
         (0, 0)
     };
 
-    let conf = RawMemMapConfig {
+    let conf = RawMemMap2Config::V0 {
+        size,
         resource_off: off,
-        resource_to_map: ri as usize,
-        guard_pages_count,
-        page_count,
+        resource_to_map: ri,
+        __rsv0: 0,
+        __rsvd1: 0,
         addr_hint,
     };
 
-    let mut res_id_results = 0xAA_AA_AA_AA;
     let result_start_addr = unsafe {
-        sysmem_map(
+        sysmem_map2(
             RequiredPtr::new_unchecked(&raw const conf as *mut _),
             flags,
-            RequiredPtr::new(&raw mut res_id_results).into(),
+            prot,
+            if let Some(res) = control_resource_out {
+                RequiredPtr::new(res).into()
+            } else {
+                OptionalPtrMut::none()
+            },
         )
         .get()?
     };
-    let result_ri = res_id_results;
 
-    // each Page is 4096 bytes
-    let len = page_count * 4096;
-    let slice = unsafe { core::slice::from_raw_parts_mut(result_start_addr.as_ptr(), len) };
+    let slice = unsafe { core::slice::from_raw_parts_mut(result_start_addr.as_ptr(), size) };
 
-    unsafe { Ok((result_ri, NonNull::new_unchecked(slice))) }
+    unsafe { Ok(NonNull::new_unchecked(slice)) }
+}
+
+/// Unmaps a given address with the given size.
+pub unsafe fn unmap(addr: *const (), size: usize) -> Result<(), ErrorStatus> {
+    sysmem_unmap(addr, size).get()
+}
+
+pub unsafe fn memop(mut target: MemMapTarget, mut op: MemMapOp) -> Result<(), ErrorStatus> {
+    unsafe {
+        sysmem_op(
+            RequiredPtr::new_unchecked(&raw mut target),
+            RequiredPtr::new_unchecked(&raw mut op),
+        )
+        .get()
+    }
+}
+
+/// Changes the protection rules of the memory at the given `addr` with the given `size` to `rules`.
+pub unsafe fn protect(addr: *const (), size: usize, rules: MemFlags) -> Result<(), ErrorStatus> {
+    unsafe {
+        memop(
+            MemMapTarget::Direct(addr.cast(), size),
+            MemMapOp::Protect(rules),
+        )
+    }
 }
 
 impl IntoSyscallArg for ShmFlags {

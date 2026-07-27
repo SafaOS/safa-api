@@ -1,4 +1,7 @@
-use safa_abi::{errors::ErrorStatus, fs::OpenOptions};
+use safa_abi::{
+    errors::ErrorStatus,
+    fs::{OpenOptions, SeekWrench},
+};
 
 use crate::syscalls::{self, types::Ri};
 
@@ -28,14 +31,38 @@ impl Resource {
 
     #[inline]
     /// [`syscalls::io::read`].
-    pub unsafe fn read(&self, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
+    pub fn read(&self, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
         syscalls::io::read(self.0, offset, buf)
     }
 
     #[inline]
     /// [`syscalls::io::write`].
-    pub unsafe fn write(&self, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus> {
+    pub fn write(&self, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus> {
         syscalls::io::write(self.0, offset, buf)
+    }
+
+    #[inline]
+    /// [`syscalls::io::read_next`].
+    pub fn read_next(&self, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
+        syscalls::io::read_next(self.0, buf)
+    }
+
+    #[inline]
+    /// [`syscalls::io::write_next`].
+    pub fn write_next(&self, buf: &[u8]) -> Result<usize, ErrorStatus> {
+        syscalls::io::write_next(self.0, buf)
+    }
+
+    #[inline]
+    /// [`syscalls::io::seek`].
+    pub fn seek(&self, wrench: SeekWrench) -> Result<usize, ErrorStatus> {
+        syscalls::io::seek(self.0, wrench)
+    }
+
+    #[inline]
+    /// [`syscalls::io::tell`].
+    pub fn tell(&self) -> Result<usize, ErrorStatus> {
+        syscalls::io::tell(self.0)
     }
 
     #[inline]

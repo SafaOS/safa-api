@@ -30,9 +30,14 @@ impl MotherVTTY {
         &self.resource
     }
 
-    /// Reads data from the VTTY at the specified offset into the provided buffer.
-    pub fn read(&self, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
-        unsafe { self.resource.read(offset, buf) }
+    /// Reads data from the VTTY.
+    pub fn read(&self, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
+        self.resource.read_next(buf)
+    }
+
+    /// Writes data to the VTTY.
+    pub fn write(&self, buf: &[u8]) -> Result<usize, ErrorStatus> {
+        self.resource.write_next(buf)
     }
 
     /// Sends a command to the VTTY with the specified command and argument.
@@ -52,14 +57,14 @@ impl ChildVTTY {
         &self.resource
     }
 
-    /// Writes data to the VTTY at the specified offset from the provided buffer.
-    pub fn write(&self, offset: isize, buf: &[u8]) -> Result<usize, ErrorStatus> {
-        unsafe { self.resource.write(offset, buf) }
+    /// Writes data to the VTTY.
+    pub fn write(&self, buf: &[u8]) -> Result<usize, ErrorStatus> {
+        self.resource.write_next(buf)
     }
 
-    /// Reads data from the VTTY at the specified offset into the provided buffer.
-    pub fn read(&self, offset: isize, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
-        unsafe { self.resource.read(offset, buf) }
+    /// Reads data from the VTTY .
+    pub fn read(&self, buf: &mut [u8]) -> Result<usize, ErrorStatus> {
+        self.resource.read_next(buf)
     }
 }
 

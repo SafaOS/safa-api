@@ -6,7 +6,6 @@ use safa_abi::errors::ErrorStatus;
 use crate::syscalls::types::RequiredPtr;
 use crate::syscalls::types::RequiredPtrMut;
 
-use super::define_syscall;
 use super::SyscallNum;
 
 define_syscall! {

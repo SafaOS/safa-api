@@ -16,8 +16,8 @@ use safa_abi::ffi::slice::Slice;
 
 use alloc::ffi::CString;
 
-use crate::sync::cell::LazyCell;
 use crate::sync::locks::Mutex;
+use crate::sync::LazyLock;
 
 // Environment variables
 
@@ -229,7 +229,7 @@ impl RawEnvStatic {
 pub(super) static SAAPI_RAW_ENV: RawEnvStatic = RawEnvStatic::new();
 
 // FIXME: use a RwLock
-static ENV: LazyCell<Mutex<EnvVars>> = LazyCell::new(|| {
+static ENV: LazyLock<Mutex<EnvVars>> = LazyLock::new(|| {
     let mut env = EnvVars::new();
     unsafe { env.insert_raw(SAAPI_RAW_ENV.as_slice()) };
     Mutex::new(env)

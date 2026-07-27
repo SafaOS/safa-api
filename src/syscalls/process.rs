@@ -18,7 +18,7 @@ use crate::{
     syscalls::types::{OptionalPtrMut, Pid, RequiredPtr, RequiredPtrMut, Ri, SyscallResults},
 };
 
-use super::{define_syscall, SyscallNum};
+use super::SyscallNum;
 
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;

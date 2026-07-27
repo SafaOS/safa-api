@@ -2,7 +2,7 @@ use safa_abi::errors::ErrorStatus;
 
 use crate::syscalls::types::Ri;
 
-use super::{define_syscall, SyscallNum};
+use super::SyscallNum;
 define_syscall! {
     SyscallNum::SysRDestroy => {
         /// Destroys "closes" a resource with the id `ri`, a resource can be a File, a Directory, a DirIter, etc...

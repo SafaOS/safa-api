@@ -10,7 +10,7 @@ use crate::{
     syscalls::types::{RequiredPtr, SyscallResults, Tid},
 };
 
-use super::{define_syscall, SyscallNum};
+use super::SyscallNum;
 
 define_syscall! {
     SyscallNum::SysTExit => {

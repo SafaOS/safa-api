@@ -2,7 +2,7 @@ use safa_abi::arch::ArchOp;
 
 use crate::syscalls::types::IntoSyscallArg;
 
-use super::{define_syscall, SyscallNum};
+use super::SyscallNum;
 
 impl IntoSyscallArg for ArchOp {
     type RegResults = <u32 as IntoSyscallArg>::RegResults;

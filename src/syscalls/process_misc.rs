@@ -1,4 +1,4 @@
-use super::{define_syscall, SyscallNum};
+use super::SyscallNum;
 
 #[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate alloc;

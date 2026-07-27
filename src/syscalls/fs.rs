@@ -4,7 +4,6 @@ use safa_abi::{
     fs::{DirEntry, OpenOptions},
 };
 
-use super::define_syscall;
 use super::SyscallNum;
 use crate::syscalls::types::{OptionalPtrMut, RequiredPtrMut, Ri};
 

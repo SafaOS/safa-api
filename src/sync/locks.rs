@@ -3,6 +3,7 @@
 //! uses Futexes internally
 
 use core::{
+    cell::UnsafeCell,
     marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicU32, Ordering},
@@ -46,24 +47,27 @@ impl<'a, T> DerefMut for MutexGuard<'a, T> {
 #[derive(Debug)]
 pub struct Mutex<T> {
     state: AtomicU32,
-    inner: T,
+    inner: UnsafeCell<T>,
 }
+
+unsafe impl<T: Send> Send for Mutex<T> {}
+unsafe impl<T: Send> Sync for Mutex<T> {}
 
 impl<T> Mutex<T> {
     /// Constructs a new free Mutex.
     pub const fn new(inner: T) -> Self {
         Self {
             state: AtomicU32::new(M_AVAILABLE),
-            inner,
+            inner: UnsafeCell::new(inner),
         }
     }
     /// Gets a mutable reference to the inner value.
     pub const fn get_mut(&mut self) -> &mut T {
-        &mut self.inner
+        self.inner.get_mut()
     }
     /// Gets a mutable pointer to the inner value.
     pub const fn get(&self) -> *mut T {
-        &self.inner as *const T as *mut T
+        self.inner.get()
     }
     /// Locks the mutex, blocking the current thread until it can be acquired.
     ///
@@ -117,15 +121,6 @@ impl<T> Mutex<T> {
             // will also handle the case where the mutex is already unlocked
             self.state.store(M_AVAILABLE, Ordering::Release);
             futex_wake(&self.state, 1).expect("System error while waking 1 Futex");
-        }
-    }
-}
-
-impl<T: Clone> Clone for Mutex<T> {
-    fn clone(&self) -> Self {
-        Mutex {
-            state: AtomicU32::new(M_AVAILABLE),
-            inner: self.inner.clone(),
         }
     }
 }

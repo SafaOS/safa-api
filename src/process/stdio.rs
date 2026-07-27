@@ -8,10 +8,10 @@ use crate::{
 };
 use safa_abi::{ffi::option::COption, process::ProcessStdio};
 
-use crate::sync::cell::LazyCell;
+use crate::sync::lazy::LazyLock;
 
-static STDIO: LazyCell<ProcessStdio> = LazyCell::new(|| proc_meta().stdio);
-static STDIN: LazyCell<Ri> = LazyCell::new(|| {
+static STDIO: LazyLock<ProcessStdio> = LazyLock::new(|| proc_meta().stdio);
+static STDIN: LazyLock<Ri> = LazyLock::new(|| {
     let stdin: Option<Ri> = STDIO.into_rust().1;
     if let Some(stdin) = stdin {
         stdin
@@ -20,7 +20,7 @@ static STDIN: LazyCell<Ri> = LazyCell::new(|| {
     }
 });
 
-static STDOUT: LazyCell<Ri> = LazyCell::new(|| {
+static STDOUT: LazyLock<Ri> = LazyLock::new(|| {
     let stdout: Option<Ri> = STDIO.into_rust().0;
     if let Some(stdout) = stdout {
         stdout
@@ -29,7 +29,7 @@ static STDOUT: LazyCell<Ri> = LazyCell::new(|| {
     }
 });
 
-static STDERR: LazyCell<Ri> = LazyCell::new(|| {
+static STDERR: LazyLock<Ri> = LazyLock::new(|| {
     let stderr: Option<Ri> = STDIO.into_rust().2;
     if let Some(stderr) = stderr {
         stderr

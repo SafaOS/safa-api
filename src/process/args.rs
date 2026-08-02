@@ -51,7 +51,7 @@ impl RawArgsStatic {
     }
 
     const unsafe fn get_unchecked(&self) -> &mut RawArgs {
-        (*self.0.get()).assume_init_mut()
+        unsafe { (*self.0.get()).assume_init_mut() }
     }
 
     unsafe fn get(&self, index: usize) -> Option<&'static str> {

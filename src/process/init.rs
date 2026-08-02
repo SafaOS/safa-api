@@ -75,7 +75,7 @@ pub unsafe extern "C" fn _c_api_init(
     main: extern "C" fn(argc: i32, argv: *const *const u8) -> i32,
     atexit: extern "C" fn(i32),
 ) -> ! {
-    sysapi_init(args, env, *task_abi_structures);
+    unsafe { sysapi_init(args, env, *task_abi_structures) };
 
     // Convert SafaOS `_start` arguments to `main` arguments
     fn c_main_args(args: Slice<Str>) -> (i32, *const *const u8) {

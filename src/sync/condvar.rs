@@ -1,5 +1,5 @@
-use crate::sync::futex::{futex_wait, futex_wake, futex_wake_all, Futex};
 use crate::sync::MutexInner;
+use crate::sync::futex::{Futex, futex_wait, futex_wake, futex_wake_all};
 use core::sync::atomic::Ordering::Relaxed;
 use core::time::Duration;
 
@@ -34,11 +34,13 @@ impl CondvarInner {
     }
 
     pub unsafe fn wait(&self, mutex: &MutexInner) {
-        self.wait_optional_timeout(mutex, None);
+        unsafe {
+            self.wait_optional_timeout(mutex, None);
+        }
     }
 
     pub unsafe fn wait_timeout(&self, mutex: &MutexInner, timeout: Duration) -> bool {
-        self.wait_optional_timeout(mutex, Some(timeout))
+        unsafe { self.wait_optional_timeout(mutex, Some(timeout)) }
     }
 
     unsafe fn wait_optional_timeout(&self, mutex: &MutexInner, timeout: Option<Duration>) -> bool {
@@ -46,7 +48,7 @@ impl CondvarInner {
         let futex_value = self.futex.load(Relaxed);
 
         // Unlock the mutex before going to sleep.
-        mutex.unlock();
+        unsafe { mutex.unlock() };
 
         // Wait, but only if there hasn't been any
         // notification since we unlocked the mutex.

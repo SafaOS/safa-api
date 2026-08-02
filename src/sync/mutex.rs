@@ -270,3 +270,28 @@ impl<T: fmt::Display> fmt::Display for MutexGuard<'_, T> {
         (**self).fmt(f)
     }
 }
+
+#[cfg(feature = "lock_api")]
+mod _lock_api {
+    use lock_api::{GuardSend, RawMutex};
+
+    use crate::sync::MutexInner;
+
+    unsafe impl RawMutex for MutexInner {
+        const INIT: MutexInner = MutexInner::new();
+
+        type GuardMarker = GuardSend;
+
+        fn lock(&self) {
+            self.lock()
+        }
+
+        fn try_lock(&self) -> bool {
+            self.try_lock()
+        }
+
+        unsafe fn unlock(&self) {
+            unsafe { self.unlock() }
+        }
+    }
+}

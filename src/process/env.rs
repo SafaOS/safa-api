@@ -16,8 +16,8 @@ use safa_abi::ffi::slice::Slice;
 
 use alloc::ffi::CString;
 
-use crate::sync::locks::Mutex;
 use crate::sync::LazyLock;
+use crate::sync::locks::Mutex;
 
 // Environment variables
 
@@ -138,7 +138,7 @@ impl EnvVars {
             let value = spilt.next();
             let value = value.unwrap_or_default();
 
-            self.push(key, value);
+            unsafe { self.push(key, value) };
         }
     }
 
@@ -212,7 +212,7 @@ impl RawEnvStatic {
     }
 
     const unsafe fn get_unchecked(&self) -> &mut RawEnv {
-        (*self.0.get()).assume_init_mut()
+        unsafe { (*self.0.get()).assume_init_mut() }
     }
 
     pub const unsafe fn as_slice(&self) -> &'static [&'static [u8]] {

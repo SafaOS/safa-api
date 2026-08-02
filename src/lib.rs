@@ -8,7 +8,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(feature = "linkonce", feature(linkage))]
 
-mod backtrace;
+pub mod backtrace;
 
 use core::fmt::{Arguments, Write};
 

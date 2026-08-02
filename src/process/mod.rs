@@ -19,12 +19,12 @@ struct StaticAbiStructures(UnsafeCell<MaybeUninit<AbiStructures>>);
 impl StaticAbiStructures {
     pub unsafe fn init(&self, structures: AbiStructures) {
         let ptr = self.0.get();
-        ptr.write(MaybeUninit::new(structures));
+        unsafe { ptr.write(MaybeUninit::new(structures)) }
     }
 
     pub unsafe fn get(&'static self) -> &'static AbiStructures {
         let ptr = self.0.get();
-        MaybeUninit::assume_init_ref(&*ptr)
+        unsafe { MaybeUninit::assume_init_ref(&*ptr) }
     }
 }
 

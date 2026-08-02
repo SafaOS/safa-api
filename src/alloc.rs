@@ -6,7 +6,6 @@ pub mod talc;
 pub mod dlmalloc;
 
 use core::alloc::GlobalAlloc;
-#[cfg(not(any(feature = "std", feature = "rustc-dep-of-std")))]
 use core::ptr::NonNull;
 
 #[cfg(not(any(feature = "talc", feature = "dlmalloc")))]

@@ -58,7 +58,6 @@ unsafe impl Allocator for MMapSystem {
     }
 
     fn free(&self, ptr: *mut u8, size: usize) -> bool {
-        crate::printerrln!("freeing: {ptr:?}, size: {size}");
         unsafe {
             crate::syscalls::mem::unmap(ptr.cast(), size).expect("Failed to unmap old memory")
         };
@@ -70,7 +69,6 @@ unsafe impl Allocator for MMapSystem {
         let diff = oldsize - newsize;
         let free_start = unsafe { ptr.byte_add(newsize) };
         if (free_start as usize).is_multiple_of(PAGE_SIZE) && diff.is_multiple_of(PAGE_SIZE) {
-            crate::printerrln!("freeing: {free_start:?}, size: {diff}");
             unsafe {
                 crate::syscalls::mem::unmap(free_start.cast(), diff)
                     .expect("Failed to unmap freed memory");

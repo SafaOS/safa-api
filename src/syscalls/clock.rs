@@ -1,8 +1,11 @@
-use core::time::Duration;
+use core::{
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use crate::syscalls::{
-    types::{IntoSyscallArg, RequiredPtr, RequiredPtrMut},
     SyscallNum,
+    types::{IntoSyscallArg, RequiredPtr, RequiredPtrMut},
 };
 pub use safa_abi::clock::*;
 use safa_abi::errors::ErrorStatus;
@@ -57,6 +60,20 @@ pub fn getcntfreq() -> u64 {
     let ptr = unsafe { RequiredPtrMut::new_unchecked(&raw mut results) };
     sysclock_getcntfreq(ptr, 0);
     results
+}
+
+static CNTFREQ: AtomicU64 = AtomicU64::new(0);
+
+/// Same as [`getcntfreq`] but caches the results and therefore faster, a more efficient caching method can be implemented by the user because this uses atomics.
+#[inline]
+pub fn getcntfreq_cached() -> u64 {
+    let f = CNTFREQ.load(Ordering::Relaxed);
+    if f != 0 {
+        return f;
+    }
+    let f = getcntfreq();
+    CNTFREQ.store(f, Ordering::Relaxed);
+    f
 }
 
 #[inline]

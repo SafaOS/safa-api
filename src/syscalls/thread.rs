@@ -7,7 +7,10 @@ use safa_abi::{
 
 use crate::{
     exported_func,
-    syscalls::types::{RequiredPtr, SyscallResults, Tid},
+    syscalls::{
+        clock::{getcntfreq_cached, getcnttime},
+        types::{RequiredPtr, SyscallResults, Tid},
+    },
 };
 
 use super::SyscallNum;
@@ -68,9 +71,32 @@ pub fn wait(cid: Tid) -> Result<(), ErrorStatus> {
 /// # Returns
 /// - Err(()) if duration as milliseconds is larger than usize::MAX
 pub fn sleep(duration: Duration) -> Result<(), ()> {
-    // TODO: mcirosleep and nanosleep and friends.
-    let ms: usize = duration.as_millis() as usize;
-    Ok(assert!(syst_sleep(ms).get().is_ok()))
+    if duration.is_zero() {
+        return Ok(());
+    }
+
+    let millis: usize = duration.as_millis().try_into().map_err(|_| ())?;
+    let nanos: u128 = duration.as_nanos();
+
+    // Fast direct milli second sleep.
+    if nanos.is_multiple_of(1_000_000) {
+        Ok(assert!(syst_sleep(millis).get().is_ok()))
+    } else {
+        // emulate nano-sleep.
+        let freq = getcntfreq_cached();
+        let wake_time = getcnttime(freq) + duration;
+        if nanos > 1_000_000 {
+            assert!(syst_sleep(millis).get().is_ok())
+        }
+
+        while let left = wake_time.saturating_sub(getcnttime(freq))
+            && left.as_nanos() != 0
+        {
+            core::hint::spin_loop();
+        }
+
+        Ok(())
+    }
 }
 
 define_syscall! {

@@ -31,6 +31,7 @@ rustc-dep-of-std = [
     "core",
     "alloc",
     "dlmalloc",
+    "dlmalloc/core",
     "safa-abi/rustc-dep-of-std",
     "simpldns/rustc-dep-of-std",
     "dlmalloc/rustc-dep-of-std",
